@@ -90,6 +90,13 @@ class TheLightFollows(Task):
         dy = np.abs(led.y_hat - self.current_y)
         return np.sqrt(dx**2 + dy**2)
 
+    def faster_distance_to_LED(self, led: LEDPosition):
+        # skip sqrt for faster distance comparison,
+        # we only care about relative distances
+        dx = led.x_hat - self.current_x
+        dy = led.y_hat - self.current_y
+        return dx * dx + dy * dy
+
     def add_sample(self):  # reuse from calib so same name in softcode
         if not self.process_every == 0:
             self.process_every -= 1
@@ -98,7 +105,7 @@ class TheLightFollows(Task):
         best_idx = -1
         best_distance = np.inf
         for k, led in self.led_positions.items():
-            distance = self.distance_to_LED(led=led)
+            distance = self.faster_distance_to_LED(led=led)
             if distance < best_distance:
                 best_idx = int(k)
                 best_distance = distance
