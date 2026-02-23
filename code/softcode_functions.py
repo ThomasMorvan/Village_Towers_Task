@@ -2,7 +2,7 @@ from village.manager import manager
 
 task = manager.task
 N_LEDS = 10
-if hasattr(task.led_strip, 'num_leds'):
+if hasattr(task, 'led_strip'):
     N_LEDS = task.led_strip.num_leds
 SOFTCODE_LED_OFF = 60
 SOFTCODE_LED_BASE = 40
