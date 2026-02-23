@@ -1,5 +1,34 @@
 from village.custom_classes.task import Event, Output, Task
+import smbus
+import time
 
+# Test protocol to familiarize with trial structure.
+# This task uses temperature sensor (which is need for the apparatus),
+# reads the temperature and sends a softcode to turn on a LED (everyone has
+# LEDs laying around, right?) on either GPIO 17 or GPIO 27 depending
+# on the temperature. Need to add softcode 1 and 2 to softcode_functions.py
+# (they are in softcode_functions.old).
+
+# def function1():
+#     GPIO.setmode(GPIO.BCM)
+#     GPIO.setup(17, GPIO.OUT)
+
+#     GPIO.output(17, GPIO.HIGH)
+#     time.sleep(1)
+#     GPIO.output(17, GPIO.LOW)
+#     GPIO.cleanup()
+#     print("Done Softcode 1")
+
+
+# def function2():
+#     GPIO.setmode(GPIO.BCM)
+#     GPIO.setup(27, GPIO.OUT)
+
+#     GPIO.output(27, GPIO.HIGH)
+#     time.sleep(1)
+#     GPIO.output(27, GPIO.LOW)
+#     GPIO.cleanup()
+#     print("Done Softcode 2")
 
 # click on the link below to see the documentation about how to create
 # tasks, plots and training protocols
@@ -23,7 +52,13 @@ class TestSpeed(Task):
         Initialize the training protocol. The text in the self.info variable
         will be shown when the task is selected in the GUI to be run manually.
         """
+        self.i2c = smbus.SMBus(1)
+        self.addr=0x45
+        self.i2c.write_byte_data(self.addr,0x23,0x34)
+        time.sleep(0.5)
+        self.curr_temp = 0
         super().__init__()
+
 
         self.info = """
 
@@ -36,6 +71,15 @@ class TestSpeed(Task):
         After the center port is poked,
         both side ports are illuminated and give reward.
         """
+
+    def read_temp(self):
+        self.i2c.write_byte_data(self.addr,0xe0,0x0)
+        data = self.i2c.read_i2c_block_data(self.addr,0x0,6)
+        rawT = ((data[0]) << 8) | (data[1])
+        rawR = ((data[3]) << 8) | (data[4])
+        temp = -45 + rawT * 175 / 65535
+        temp = round(temp, 1)
+        return temp
 
     def start(self):
         """
@@ -79,20 +123,52 @@ class TestSpeed(Task):
         This function is called once per trial, first it modifies variables and then
         sends the state machine to the bpod that will run the trial.
         """
+        print("Started create trial")
+        threshold = 30
+        self.curr_temp = self.read_temp()
+        if self.curr_temp < threshold:
+            name = "Cold"
+        elif self.curr_temp >= threshold:
+            name = "Warm"
+        else:
+            print("Temperature error?")
+            name = "Wait"
+        print(f'Temp: {self.curr_temp}C --> {name}')
 
-        self.controller.add_state(
-            state_name="A",
-            state_timer=2,
-            state_change_conditions={Event.Tup: "B"},
-            output_actions=[Output.SoftCode7, Output.BNC1Low],
+        self.bpod.add_state(
+            state_name="Wait",
+            state_timer=1,
+            state_change_conditions={Event.Tup: name},
+            output_actions=[],
         )
 
-        self.controller.add_state(
-            state_name="B",
-            state_timer=2,
-            state_change_conditions={Event.Tup: "A"},
-            output_actions=[Output.SoftCode14, Output.BNC1High],
+
+        self.bpod.add_state(
+            state_name="Cold",
+            state_timer=0,
+            state_change_conditions={Event.Tup: "exit"},
+            output_actions=[Output.SoftCode1],
         )
+
+        self.bpod.add_state(
+            state_name="Warm",
+            state_timer=0,
+            state_change_conditions={Event.Tup: "exit"},
+            output_actions=[Output.SoftCode2],
+        )
+        # self.controller.add_state(
+        #     state_name="A",
+        #     state_timer=2,
+        #     state_change_conditions={Event.Tup: "B"},
+        #     output_actions=[Output.SoftCode7, Output.BNC1Low],
+        # )
+
+        # self.controller.add_state(
+        #     state_name="B",
+        #     state_timer=2,
+        #     state_change_conditions={Event.Tup: "A"},
+        #     output_actions=[Output.SoftCode14, Output.BNC1High],
+        # )
 
         # self.bpod.add_state(
         #     state_name="first",
@@ -184,8 +260,8 @@ class TestSpeed(Task):
         an alarm will be triggered.
         This threshold can be adjusted in the Settings tab of the GUI.
         """
-
-        pass
+        self.register_value("water", -1)
+        self.register_value("temperature", self.curr_temp)
 
         # self.register_value("water", self.settings.reward_amount_ml)
 
