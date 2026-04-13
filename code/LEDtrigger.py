@@ -19,4 +19,4 @@ class LEDTrigger(CameraTriggerBase):
             cam (CameraBase): The camera instance providing the trigger status.
         """
 
-        manager.run_softcode_function(13)
+        manager.run_softcode_function(3)
