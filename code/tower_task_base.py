@@ -7,11 +7,10 @@ from threading import Event as thEvent
 import importlib
 import importlib.util
 from village.scripts.log import log
-from village.custom_classes.task import Task, Event
+from village.custom_classes.task import Task
 from village.devices.led_strip import get_led_strip
 from village.settings import settings
 from village.manager import manager
-
 
 
 class Color():
@@ -27,7 +26,7 @@ class Color():
 
     def __repr__(self):
         return f"[{self.red} {self.green} {self.blue}]"
-    
+
 
 class LEDPosition:
     """Simple class to hold LED position data"""
@@ -51,7 +50,8 @@ class LEDPosition:
             self.y_hat = np.median(self.samples_y)
 
     def __repr__(self):
-        return f"LED {self.idx}:::({self.x_hat}, {self.y_hat}) ::: {len(self.samples_x)} samples"
+        return f"LED {self.idx}:::({self.x_hat}, {self.y_hat}) :::" \
+               f"{len(self.samples_x)} samples"
 
 
 class TowersTaskBase(Task):
@@ -70,7 +70,6 @@ class TowersTaskBase(Task):
     COLOR_USED = Color(10, 5, 0)
 
     NUM_LEDS = 155
-
 
     def __init__(self):
         super().__init__()
@@ -119,14 +118,22 @@ class TowersTaskBase(Task):
         self._current_frame = frame_idx
 
     def set_ui_settings(self):
-        """To override. Force general settings from village.settings e.g. area zones
-        settings.set("AREA4_BOX", [100, 110, 120, 200, 50])  #L, T, R, B, Thr
-        settings.set("USAGE4_BOX", "NOT_ALLOWED")  # "ALLOWED" | "NOT_ALLOWED" | "TRIGGER" | "OFF"
-        """ 
+        """To override. Force general settings from village.settings
+        such as area ROIs, White or Black for detection, etc.
+        Check settings.py for what settings are available.
+        Example:
+            Set AREA4_BOX ROI:
+                                           L,   T,   R,   B,   Thr
+                settings.set("AREA4_BOX", [100, 110, 120, 200, 50])
+            Set AREA4_BOX usage:
+                settings.set("USAGE4_BOX", use) --- where
+                USE in "ALLOWED" | "NOT_ALLOWED" | "TRIGGER" | "OFF"
+        """
         pass
 
     def softcode_callback(self):
-        """To override if needed. Called from a softcode to do soñething in Task"""
+        """To override if needed. Called from a
+        softcode to do something in Task"""
         pass
 
     def reload_softcode(self) -> None:
@@ -142,7 +149,8 @@ class TowersTaskBase(Task):
 
         if os.path.exists(functions_path):
             module_name = "custom_module"
-            spec = importlib.util.spec_from_file_location(module_name, functions_path)
+            spec = importlib.util.spec_from_file_location(module_name,
+                                                          functions_path)
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
                 try:
@@ -175,19 +183,25 @@ class TowersTaskBase(Task):
                         "y": int(v.y_hat) if v.y_hat is not None else -1}
                for k, v in self.led_positions.items()}
 
-        path = Path(settings.get("DATA_DIRECTORY"), self.CALIBRATION_PATH + ".json")
+        path = Path(settings.get("DATA_DIRECTORY"),
+                    self.CALIBRATION_PATH + ".json")
         path.write_text(json.dumps(out, indent=2))
         self.register_value("led_strip_calibration_path", str(path))
         self.register_value(self.CALIBRATION_PATH + ".json", out)
 
     def load_led_calibration(self):
-        path = Path(settings.get("DATA_DIRECTORY"), self.CALIBRATION_PATH + ".json")
+        path = Path(settings.get("DATA_DIRECTORY"),
+                    self.CALIBRATION_PATH + ".json")
         with open(path) as f:
             calibration = json.load(f)
 
         for k, v in calibration.items():
-            self.led_positions[int(k)] = LEDPosition(idx=int(k), x_hat=v['x'], y_hat=v['y'])
-        assert len(self.led_positions) == self.led_strip.num_leds, "Incongruent num_leds between calibration and led strip."
+            self.led_positions[int(k)] = LEDPosition(idx=int(k),
+                                                     x_hat=v['x'],
+                                                     y_hat=v['y'])
+        error_str = f"Mismatch num_leds between calibration and led strip:" \
+                    f" {len(self.led_positions)} vs {self.led_strip.num_leds}"
+        assert len(self.led_positions) == self.led_strip.num_leds, error_str
 
     def _close_strip(self):
         self.accept_frames.clear()
@@ -199,7 +213,7 @@ class TowersTaskBase(Task):
         self.reload_softcode()
 
     def after_trial(self):
-        pass 
+        pass
 
     def close(self):
         pass

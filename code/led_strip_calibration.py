@@ -14,16 +14,20 @@ from tower_task_base import TowersTaskBase
 
 class LedStripCalibration(TowersTaskBase):
     """
-    
+    Sequentially turn ON each LED in the strip, capture (with cam_box) the
+    detected (x, y) position, then turn it OFF and move to the next LED.
+    The result is a mapping of led_index -> (x, y) position from camera POV.
+    This gives us the LED positions in camera coordinates, which we will
+    certainly use in the main Task at some point.
     """
     def __init__(self):
         super().__init__()
         self.on_time = 0.4  # LED ON duration (s) so camera can detect
         self.off_time = 0.05  # duration (s) between LEDs
-        self.settle_time = 0.05  # duration (s) after turning ON before video acquisition
+        self.settle_time = 0.05  # duration (s) between LED ON and frame cap
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [60, 285, 560, 292, 200])  #L, T, R, B, Thr
+        settings.set("AREA1_BOX", [60, 285, 560, 292, 200])  # L, T, R, B, Thr
         settings.set("AREA2_BOX", [60, 311, 560, 318, 200])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "ALLOWED")
@@ -37,7 +41,7 @@ class LedStripCalibration(TowersTaskBase):
 
     def create_trial(self):
         self.bpod.add_state(
-            state_name=f"LED_ON",
+            state_name="LED_ON",
             state_timer=self.settle_time + self.on_time + self.off_time,
             state_change_conditions={Event.Tup: "exit"},
             output_actions=[("SoftCode", self.SOFTCODE_LED_ON_CAPTURE)],
@@ -64,5 +68,6 @@ class LedStripCalibration(TowersTaskBase):
         ax.set_ylim(480, 0)
         ax.set_xlabel("X (px)")
         ax.set_ylabel("Y (px)")
-        path = Path(settings.get("DATA_DIRECTORY"), self.CALIBRATION_PATH + ".png")
+        path = Path(settings.get("DATA_DIRECTORY"),
+                    self.CALIBRATION_PATH + ".png")
         plt.savefig(path)
