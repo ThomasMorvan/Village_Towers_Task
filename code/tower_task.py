@@ -1,35 +1,30 @@
 
 from typing import Literal
 import numpy as np
-from village.custom_classes.task import  Event
+from village.custom_classes.task import Event
 from village.settings import settings
 from village.manager import manager
-from tower_task_base import TowersTaskBase, LEDPosition
-
-
-# task
+from tower_task_base import TowersTaskBase
 
 
 class TowersTask(TowersTaskBase):
-    """
-    
-    """
+    """Towers Task."""
 
     def __init__(self):
         super().__init__()
         self.on_state_duration = 300
-        self.led_on_duration = 0.2  # Led on in (s)
+        self.led_on_duration = 0.2  # Led on in (s)  # TODO: implement in settings
         self._furthest_x = -1
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.next_trigger = 0
-        self.distance_offset = 20  # distance in front of centroid in pixels for now
+        self.distance_offset = 20  # FIXME: distance in front of centroid in pixels for now
         self.mock_x = 0
 
     def set_ui_settings(self):
-        settings.set("AREA2_BOX", [0, 40, 640, 70, 120])
-        settings.set("USAGE1_BOX", "OFF")
-        settings.set("USAGE2_BOX", "ALLOWED")
+        settings.set("AREA1_BOX", [75, 290, 555, 320, 120])
+        settings.set("USAGE1_BOX", "ALLOWED")
+        settings.set("USAGE2_BOX", "OFF")
         settings.set("USAGE3_BOX", "OFF")
         settings.set("USAGE4_BOX", "OFF")
         settings.set("DETECTION_COLOR", "BLACK")
@@ -39,10 +34,11 @@ class TowersTask(TowersTaskBase):
         self.maximum_number_of_trials = 10
         self.load_led_calibration()
 
+    # TODO: remove and use new methods
     def select_leds_idx(self):
         N = 10
         l = range(self.led_strip.num_leds)
-        l = list(range(20)) + list(range(25, self.led_strip.num_leds))
+        l = list(range(73)) + list(range(83, self.led_strip.num_leds))
         selected = np.random.choice(l, size=N, replace=False)
         self.available_leds_idx.update([int(i) for i in selected])
         self.debug_color_state_leds()
@@ -60,7 +56,8 @@ class TowersTask(TowersTaskBase):
 
         return int(next_idx)
 
-    def softcode_callback(self, auto=True):
+    # TODO: Implement real auto mode
+    def softcode_callback(self, auto=False):
         self.mock_x += 1
         self.mock_x = min(self.mock_x, 640)
 
@@ -80,7 +77,7 @@ class TowersTask(TowersTaskBase):
             if self.current_x <= self._furthest_x:
                 return
             self._furthest_x = self.current_x
-
+        self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
 
         if self._furthest_x < self.next_trigger:
             return
@@ -143,6 +140,8 @@ class TowersTask(TowersTaskBase):
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.next_trigger = 0
+        self._furthest_x = -1
+        self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
 
     def close(self):
         self._close_strip()

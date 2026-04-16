@@ -79,3 +79,15 @@ def function5():
     _set_led_color(task.current_led, *task.COLOR_ON)
     time.sleep(task.led_on_duration)
     _set_led_color(task.current_led, *task.COLOR_OFF, verbose=False)
+
+
+def function6():
+    print("Port 1 poke")
+
+
+def function7():
+    print("Port 2 poke")
+
+
+def function8():
+    print("Port 3 poke")
