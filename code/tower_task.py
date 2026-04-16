@@ -17,12 +17,12 @@ class TowersTask(TowersTaskBase):
         self._furthest_x = -1
         self.available_leds_idx = set()
         self.used_leds_idx = set()
-        self.next_trigger = 0
-        self.distance_offset = 20  # FIXME: distance in front of centroid in pixels for now
-        self.mock_x = 0
+        self.led_triggers = []  # sorted list of (trigger_x, led_idx)
+        self.next_trigger = -1   # display only: x position of leds
+        self.distance_offset = 50  # FIXME: distance in front of centroid in pixels for now
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [75, 290, 555, 320, 50])
+        settings.set("AREA1_BOX", [75, 290, 555, 320, 65])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "OFF")
         settings.set("USAGE3_BOX", "OFF")
@@ -41,61 +41,57 @@ class TowersTask(TowersTaskBase):
         l = list(range(73)) + list(range(83, self.led_strip.num_leds))
         selected = np.random.choice(l, size=N, replace=False)
         self.available_leds_idx.update([int(i) for i in selected])
+        self._build_led_triggers()
+        self._build_led_pos()
         self.debug_color_state_leds()
 
-    def get_next_LED(self, available_leds_idx: list[int],
-                     axis: Literal["x", "y"] = "x"):
-        if axis == "x":
-            next_idx = min(available_leds_idx, key=lambda i: self.led_positions[i].x_hat)
-            self.next_trigger = self.led_positions[next_idx].x_hat - self.distance_offset
-        elif axis == "y":
-            next_idx = min(available_leds_idx, key=lambda i: self.led_positions[i].y_hat)
-            self.next_trigger = self.led_positions[next_idx].y_hat - self.distance_offset
-        else:
-            raise NotImplementedError
+    def _build_led_pos(self):
+        self.cam_box.items_to_draw["led_pos"] = sorted(
+            [self.led_positions[i].x_hat
+                for i in self.available_leds_idx]
+            )
 
-        return int(next_idx)
+    def _build_led_triggers(self):
+        """Pre-compute sorted (trigger_x, led_idx) list
+        from current available_leds_idx."""
+        self.led_triggers = sorted(
+            [(self.led_positions[i].x_hat - self.distance_offset, int(i))
+             for i in self.available_leds_idx]
+        )
+        self.next_trigger = self.led_triggers[0][0] if self.led_triggers else 0
 
-    # TODO: Implement real auto mode
-    def softcode_callback(self, auto=False):
-        self.mock_x += 1
-        self.mock_x = min(self.mock_x, 640)
-
+    def softcode_callback(self):
         self.debug_color_state_leds()
-        best_idx = -1
-        if len(self.available_leds_idx) == 0:
+
+        # If no more LED triggers, do nothing
+        if not self.led_triggers:
             return
 
-        if self._furthest_x > self.next_trigger:
-            self._furthest_x = 0
+        # If current position hasn't passed furthest_x, do nothing
+        if self.current_x <= self._furthest_x:
+            return
 
-        if auto:
-            if self.mock_x <= self._furthest_x:
-                return
-            self._furthest_x = self.mock_x
-        else:
-            if self.current_x <= self._furthest_x:
-                return
-            self._furthest_x = self.current_x
+        # Update furthest_x and display it
+        self._furthest_x = self.current_x
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
 
+        # If furthest_x hasn't passed next_trigger, do nothing
         if self._furthest_x < self.next_trigger:
             return
 
-        best_idx = self.get_next_LED(self.available_leds_idx)
+        # Fire all LEDs whose trigger has been crossed
+        while self.led_triggers and self._furthest_x >= self.led_triggers[0][0]:
+            trigger_x, led_idx = self.led_triggers.pop(0)
+            self.current_led = led_idx
+            manager.run_softcode_function(self.SOFTCODE_SINGLE_LED_ON)
+            self.available_leds_idx.discard(led_idx)
+            self.used_leds_idx.add(led_idx)
+            print("+", self.available_leds_idx, ">>>", led_idx, ">>>  -",
+                  self.used_leds_idx, "::: trigger=", trigger_x)
+
+        # Update next_trigger to next LED trigger and display it
+        self.next_trigger = self.led_triggers[0][0] if self.led_triggers else self.next_trigger
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
-
-        if best_idx == -1:
-            return
-
-        self.current_led = best_idx
-        manager.run_softcode_function(self.SOFTCODE_SINGLE_LED_ON)
-
-
-        self.available_leds_idx.remove(best_idx)
-        self.used_leds_idx.add(best_idx)
-
-        print("+", self.available_leds_idx, ">>>", best_idx, ">>>  -", self.used_leds_idx, "::: ", self.next_trigger)
 
     def debug_color_state_leds(self):
         for idx in range(self.led_strip.num_leds):
@@ -119,7 +115,9 @@ class TowersTask(TowersTaskBase):
         self.bpod.add_state(
             state_name="CAMERA_ON",
             state_timer=self.on_state_duration,
-            state_change_conditions={Event.Tup: "CAMERA_OFF"},
+            state_change_conditions={Event.Tup: "CAMERA_OFF",
+                                     Event.Port2In: 'CAMERA_OFF',
+                                     },
             output_actions=[("SoftCode", self.SOFTCODE_CAMERA_ACCEPT)],
         )
 
@@ -140,10 +138,12 @@ class TowersTask(TowersTaskBase):
     def after_trial(self):
         self.available_leds_idx = set()
         self.used_leds_idx = set()
-        self.next_trigger = 0
+        self.led_triggers = []
+        self.next_trigger = -1
         self._furthest_x = -1
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
+        self.cam_box.items_to_draw["led_pos"] = []
 
     def close(self):
         self._close_strip()
