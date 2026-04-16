@@ -22,7 +22,7 @@ class TowersTask(TowersTaskBase):
         self.mock_x = 0
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [75, 290, 555, 320, 120])
+        settings.set("AREA1_BOX", [75, 290, 555, 320, 50])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "OFF")
         settings.set("USAGE3_BOX", "OFF")
@@ -83,6 +83,7 @@ class TowersTask(TowersTaskBase):
             return
 
         best_idx = self.get_next_LED(self.available_leds_idx)
+        self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
         if best_idx == -1:
             return
@@ -142,6 +143,7 @@ class TowersTask(TowersTaskBase):
         self.next_trigger = 0
         self._furthest_x = -1
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
+        self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
     def close(self):
         self._close_strip()
