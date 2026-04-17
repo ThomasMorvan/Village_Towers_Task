@@ -29,7 +29,7 @@ class TrialResult:
         return f" {self.side} Trial {tick}"
 
 
-class DrawTrial:
+class LeftOrRight:
     SIGMA_TRIALS = 20
     SIGMA_EMPIRICAL = 60
     MIN_RANGE = 0.15
@@ -156,7 +156,7 @@ class DrawTrial:
 
 
 if __name__ == "__main__":
-    test = DrawTrial(verbose=False)
+    test = LeftOrRight(verbose=False)
     sides = []
     for _ in range(1000):
         side = test.draw_next_trial()
