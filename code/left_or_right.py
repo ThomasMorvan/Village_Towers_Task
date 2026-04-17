@@ -1,26 +1,32 @@
 """Implementation of the trial side selection process described in
 doi: 10.3389/fnbeh.2018.00036."""
-
+from enum import Enum
 from collections import deque
-from typing import Literal
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 
+class TrialSide(Enum):
+    LEFT = "L"
+    RIGHT = "R"
+    NONE = "None"
+
+
 class TrialResult:
-    def __init__(self, side: Literal["R", "L"], correct: bool):
-        self.side = side  # 'R' or 'L'
+    def __init__(self, side: TrialSide, correct: bool):
+        self.side = side
         self.correct = correct  # True or False
 
     @classmethod
-    def generate_trial(cls, side: Literal["R", "L"] | None = None,
+    def generate_trial(cls, side: TrialSide | None = None,
                        correct_prob_L: float = 0.8,
                        correct_prob_R: float = 0.7
                        ) -> "TrialResult":
         if side is None:
-            side = np.random.choice(['R', 'L'])
-        correct_prob = correct_prob_R if side == "R" else correct_prob_L
+            side = np.random.choice([TrialSide.RIGHT, TrialSide.LEFT])
+        correct_prob = (correct_prob_R if side == TrialSide.RIGHT
+                        else correct_prob_L)
         correct = np.random.rand() < correct_prob
         return cls(side, correct)
 
@@ -36,7 +42,7 @@ class LeftOrRight:
     MAX_RANGE = 0.85
     WINDOW_SIZE = 40
 
-    def __init__(self, verbose=True):
+    def __init__(self, verbose=False):
         self.window_size = self.WINDOW_SIZE
         self.history = deque(maxlen=self.WINDOW_SIZE)
         self.verbose = verbose
@@ -62,7 +68,7 @@ class LeftOrRight:
     def add_trial(self, trial_result: TrialResult):
         self.history.append(trial_result)
 
-    def weighted_error_fraction(self, side: str) -> float:
+    def weighted_error_fraction(self, side: TrialSide) -> float:
         """Weighted average of the fraction of errors
         in a side over the past window_size trials."""
 
@@ -82,8 +88,8 @@ class LeftOrRight:
 
     def p_R(self) -> float:
         """Compute probability of drawing a right trial."""
-        eR = self.weighted_error_fraction("R")
-        eL = self.weighted_error_fraction("L")
+        eR = self.weighted_error_fraction(TrialSide.RIGHT)
+        eL = self.weighted_error_fraction(TrialSide.LEFT)
 
         sqrt_eR = np.sqrt(eR)
         sqrt_eL = np.sqrt(eL)
@@ -104,7 +110,8 @@ class LeftOrRight:
             return 0.5
 
         trials = list(self.history)[::-1]
-        is_right = np.array([t.side == "R" for t in trials], dtype=float)
+        is_right = np.array([t.side == TrialSide.RIGHT for t in trials],
+                            dtype=float)
         weighted = self._cache_hg_empirical[:len(trials)] * is_right
         if self.verbose:
             print(f"Empirical R: {np.sum(is_right)}/{len(trials)} "
@@ -112,8 +119,8 @@ class LeftOrRight:
                   f" --> {np.sum(weighted):.3f}")
         return np.sum(weighted)
 
-    def draw_next_trial(self) -> str:
-        """Returns 'R' or 'L' according to debiased pseudo-random rule."""
+    def draw_next_trial(self) -> TrialSide:
+        """Returns a TrialSide according to debiased pseudo-random rule."""
         pR = self.p_R()
         empR = self.empirical_fraction()
 
@@ -122,7 +129,8 @@ class LeftOrRight:
         else:
             draw_prob = 0.5 * (1 + pR)
 
-        side = "R" if np.random.rand() < draw_prob else "L"
+        side = (TrialSide.RIGHT if np.random.rand() < draw_prob
+                else TrialSide.LEFT)
 
         self.PRs.append(pR)
         self.empirical_Rs.append(empR)
@@ -142,7 +150,7 @@ class LeftOrRight:
         ratio = []
         for i in range(len(self.sides)):
             s = self.sides[:i+1]
-            r = sum(1 for t in s if t == "R") / len(s)
+            r = sum(1 for t in s if t == TrialSide.RIGHT) / len(s)
             ratio.append(r)
         ax.plot(ratio, label="R / (R+L)", lw=2, color='black')
         ax.axhline(0.5, color='gray', linestyle='--')
@@ -166,8 +174,8 @@ if __name__ == "__main__":
         test.add_trial(trial)
         sides.append(side)
 
-    lefts = sum(1 for t in sides if t == "L")
-    rights = sum(1 for t in sides if t == "R")
+    lefts = sum(1 for t in sides if t == TrialSide.LEFT)
+    rights = sum(1 for t in sides if t == TrialSide.RIGHT)
     print(f"10k trials: {lefts} L, {rights} R")
 
     test.plot()

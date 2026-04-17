@@ -5,7 +5,7 @@ and converting those tower locations to LED indices."""
 import numpy as np
 
 
-class LedPlacer():
+class LedPicker():
     # parameters from what we have (apparatus length and WS2812B LED strip)
     LEDS_PER_METER = 60
     APPARATUS_LENGTH = 120  # cm
@@ -103,6 +103,14 @@ class LedPlacer():
         print(f"NRWD - cm: {self._current_no_reward_positions_cm}, "
               f"LEDs: {self._current_no_reward_leds}")
 
+    def update_mu(self, rwd_density: float | None = None, no_rwd_density: float | None = None):
+        """Update the mu parameters."""
+        if rwd_density is not None:
+            self.mu_reward = rwd_density
+        if no_rwd_density is not None:
+            self.mu_no_reward = no_rwd_density
+        self.verify_parameters()
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -118,7 +126,8 @@ if __name__ == "__main__":
     _Rs = []
     _NRs = []
 
-    lp = LedPlacer(rwd_density=7.7, no_rwd_density=2.3)
+    lp = LedPicker(rwd_density=7.7, no_rwd_density=2.3)
+    print(lp.draw_towers())
 
     count_R = {k: 0 for k in range(lp.NUM_LEDS)}
 

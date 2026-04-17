@@ -4,6 +4,11 @@ from village.custom_classes.task import Event
 from village.settings import settings
 from village.manager import manager
 from tower_task_base import TowersTaskBase
+from left_or_right import LeftOrRight, TrialSide, TrialResult
+from LEDpicker import LedPicker
+
+# TODO:
+# "istrialcorrect"
 
 
 class TowersTask(TowersTaskBase):
@@ -19,6 +24,30 @@ class TowersTask(TowersTaskBase):
         self.led_triggers = []  # sorted list of (trigger_x, led_idx)
         self.next_trigger = -1   # display only: x position of leds
         self.distance_offset = 50  # FIXME: px in front of centroid for trigger
+        self.left_or_right = LeftOrRight()
+        self.current_trial_rwd_side: TrialSide = TrialSide.NONE
+        self.is_trial_correct: bool = None
+
+        self.REWARDED_DENSITY = 7.7  # TODO: add in settings
+        self.NO_REWARD_DENSITY = 2.3  # TODO: add in settings
+        self.led_picker = LedPicker(rwd_density=self.REWARDED_DENSITY,
+                                    no_rwd_density=self.NO_REWARD_DENSITY)
+
+    def _to_strip_indices(self, leds: np.ndarray, side: TrialSide
+                          ) -> np.ndarray:
+        """Map LedPicker indices (0-71) to physical strip indices,
+        because strip goes from [0] start-right to [71] end-right,
+        then 10 empty LEDs, then [83] end-left to [154] start-left.
+
+        Right side: 0-71 maps directly (entry end = index 0).
+        Left side: reversed and shifted (index 0 maps to the entry end of the
+        left corridor (physical 154), index 71 maps to the far end (physical 83).
+          physical = LEFT_SIDE_OFFSET + (NUM_LEDS - 1) - leds
+        """
+        LEFT_SIDE_OFFSET = 83
+        if side == TrialSide.LEFT:
+            return LEFT_SIDE_OFFSET + (self.led_picker.NUM_LEDS - 1) - leds
+        return leds
 
     def set_ui_settings(self):
         settings.set("AREA1_BOX", [75, 290, 555, 320, 65])
@@ -33,13 +62,39 @@ class TowersTask(TowersTaskBase):
         self.maximum_number_of_trials = 10
         self.load_led_calibration()
 
-    # TODO: remove and use new methods
-    def select_leds_idx(self):
-        N = 10
-        l = range(self.led_strip.num_leds)
-        l = list(range(73)) + list(range(83, self.led_strip.num_leds))
-        selected = np.random.choice(l, size=N, replace=False)
-        self.available_leds_idx.update([int(i) for i in selected])
+    def get_LEDs_for_trial(self, verbose=True):
+        # Draw trial side (left or right).
+        self.current_trial_rwd_side = self.left_or_right.draw_next_trial()
+
+        # Draw LED positions for this trial.
+        rwd_leds, no_rwd_leds = self.led_picker.draw_towers()
+
+        if len(rwd_leds) < len(no_rwd_leds):
+            # Switch so that rewarded side always has more than n_rewarded
+            rwd_leds, no_rwd_leds = no_rwd_leds, rwd_leds
+
+        # Allocate drawn LEDs to both sides and map to physical strip indices
+        if self.current_trial_rwd_side == TrialSide.RIGHT:
+            map_rwd_leds = self._to_strip_indices(rwd_leds,
+                                                  TrialSide.RIGHT)
+            map_no_rwd_leds = self._to_strip_indices(no_rwd_leds,
+                                                     TrialSide.LEFT)
+        elif self.current_trial_rwd_side == TrialSide.LEFT:
+            map_rwd_leds = self._to_strip_indices(rwd_leds,
+                                                  TrialSide.LEFT)
+            map_no_rwd_leds = self._to_strip_indices(no_rwd_leds,
+                                                     TrialSide.RIGHT)
+        else:
+            raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
+
+        self.available_leds_idx.update(map_rwd_leds)
+        self.available_leds_idx.update(map_no_rwd_leds)
+        if verbose:
+            print(f"Trial {self.current_trial_rwd_side.value}: "
+                  f"{len(rwd_leds)} RWD LEDs at {rwd_leds} ({map_rwd_leds}), "
+                  f"{len(no_rwd_leds)} NO RWD LEDs at {no_rwd_leds} ({map_no_rwd_leds})"
+                  )
+
         self._build_led_triggers()
         self._build_led_pos()
         self.debug_color_state_leds()
@@ -107,7 +162,7 @@ class TowersTask(TowersTaskBase):
         self.led_strip.update_strip(sleep_duration=None)
 
     def create_trial(self):
-        self.select_leds_idx()
+        self.get_LEDs_for_trial()
         self.bpod.add_state(
             state_name="TASK_ON",
             state_timer=0,
@@ -147,6 +202,11 @@ class TowersTask(TowersTaskBase):
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
         self.cam_box.items_to_draw["led_pos"] = []
+        self.left_or_right.add_trial(
+            TrialResult(side=self.current_trial_rwd_side, correct=self.is_trial_correct)
+                        )
+        self.current_trial_rwd_side = TrialSide.NONE
+        self.is_trial_correct = None
 
     def close(self):
         self._close_strip()
