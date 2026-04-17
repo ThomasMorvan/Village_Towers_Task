@@ -1,5 +1,4 @@
 
-from typing import Literal
 import numpy as np
 from village.custom_classes.task import Event
 from village.settings import settings
@@ -13,13 +12,13 @@ class TowersTask(TowersTaskBase):
     def __init__(self):
         super().__init__()
         self.on_state_duration = 300
-        self.led_on_duration = 0.2  # Led on in (s)  # TODO: implement in settings
+        self.led_on_duration = 0.2  # Led on in (s)  # TODO: add in settings
         self._furthest_x = -1
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []  # sorted list of (trigger_x, led_idx)
         self.next_trigger = -1   # display only: x position of leds
-        self.distance_offset = 50  # FIXME: distance in front of centroid in pixels for now
+        self.distance_offset = 50  # FIXME: px in front of centroid for trigger
 
     def set_ui_settings(self):
         settings.set("AREA1_BOX", [75, 290, 555, 320, 65])
@@ -80,7 +79,8 @@ class TowersTask(TowersTaskBase):
             return
 
         # Fire all LEDs whose trigger has been crossed
-        while self.led_triggers and self._furthest_x >= self.led_triggers[0][0]:
+        while (self.led_triggers and
+               self._furthest_x >= self.led_triggers[0][0]):
             trigger_x, led_idx = self.led_triggers.pop(0)
             self.current_led = led_idx
             manager.run_softcode_function(self.SOFTCODE_SINGLE_LED_ON)
@@ -90,7 +90,10 @@ class TowersTask(TowersTaskBase):
                   self.used_leds_idx, "::: trigger=", trigger_x)
 
         # Update next_trigger to next LED trigger and display it
-        self.next_trigger = self.led_triggers[0][0] if self.led_triggers else self.next_trigger
+        if self.led_triggers:
+            self.next_trigger = self.led_triggers[0][0]
+        else:
+            self.next_trigger = -1
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
     def debug_color_state_leds(self):
