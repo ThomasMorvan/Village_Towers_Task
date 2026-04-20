@@ -2,7 +2,7 @@
 from collections import deque
 import numpy as np
 import json
-from village.custom_classes.task import Event
+from village.custom_classes.task import Event, Output
 from village.settings import settings
 from village.manager import manager
 from tower_task_base import TowersTaskBase
@@ -18,7 +18,6 @@ class TowersTask(TowersTaskBase):
 
     def __init__(self):
         super().__init__()
-        self.on_state_duration = 300
         self.led_on_duration = 0.2  # Led on in (s)  # TODO: add in settings
         self._furthest_x = 641  # FIXME: self.cam_box.width not initialized yet
         self._this_trial_leds = {TrialSide.LEFT: np.array([], dtype=int),
@@ -37,6 +36,14 @@ class TowersTask(TowersTaskBase):
         self.NO_REWARD_DENSITY = 2.3  # TODO: add in settings
         self.led_picker = LedPicker(rwd_density=self.REWARDED_DENSITY,
                                     no_rwd_density=self.NO_REWARD_DENSITY)
+
+        self.settings.punishment_time = 1  # Time in seconds for punishment
+        self.settings.iti_time = 0.5
+        self.settings.response_time = 25  # Time in seconds to respond before timeout
+        self.trial_is_cued = True
+        self.give_free_reward = True
+
+        # self.accept_frames.set()  # Test accept frames by default to skip states
 
     def _to_strip_indices(self, leds: np.ndarray, side: TrialSide
                           ) -> np.ndarray:
@@ -66,6 +73,16 @@ class TowersTask(TowersTaskBase):
         super().start()
         self.maximum_number_of_trials = 10
         self.load_led_calibration()
+
+        self.left_valve_opening_time = 2  # self.water_calibration.get_valve_time(
+        #     port=1, volume=self.settings.big_reward_amount_ml
+        # )
+        self.middle_valve_opening_time = .5  # self.water_calibration.get_valve_time(
+        #     port=2, volume=self.settings.small_reward_amount_ml
+        # )
+        self.right_valve_opening_time = 2  # self.water_calibration.get_valve_time(
+        #     port=3, volume=self.settings.big_reward_amount_ml
+        # )
 
     def get_LEDs_for_trial(self, verbose=True):
         # Draw trial side (left or right).
@@ -178,33 +195,81 @@ class TowersTask(TowersTaskBase):
         self.led_strip.update_strip(sleep_duration=None)
 
     def create_trial(self):
+
+        # Get trial side and LED positions for this trial
         self.get_LEDs_for_trial()
+
+        if self.give_free_reward:
+            self.middle_poke_action = "small_reward_state"
+        else:
+            self.middle_poke_action = "turn_on_leds"
+
+        self.cues = []
+        if self.current_trial_rwd_side == TrialSide.LEFT:
+            self.left_poke_action = "reward_state"
+            self.valve_to_open = Output.Valve1
+            self.valve_opening_time = self.left_valve_opening_time
+            self.right_poke_action = "no_reward_state"
+            if self.trial_is_cued:
+                self.cues.append((Output.PWM1,
+                                  self.settings.light_intensity_high))
+        elif self.current_trial_rwd_side == TrialSide.RIGHT:
+            self.right_poke_action = "reward_state"
+            self.valve_to_open = Output.Valve3
+            self.valve_opening_time = self.right_valve_opening_time
+            self.left_poke_action = "no_reward_state"
+            if self.trial_is_cued:
+                self.cues.append((Output.PWM3,
+                                  self.settings.light_intensity_high))
+        else:
+            raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
+
+        # Start state: wait for poke in middle port to start trial
+        # FIXME: this step should be skippable by animal at first trial.
         self.bpod.add_state(
-            state_name="TASK_ON",
+            state_name="START",
             state_timer=0,
-            state_change_conditions={Event.Tup: "CAMERA_ON"},
-            output_actions=[],
+            state_change_conditions={Event.Port2In: self.middle_poke_action},
+            output_actions=[(Output.PWM2, self.settings.light_intensity_high),
+                            ]
         )
 
         self.bpod.add_state(
-            state_name="CAMERA_ON",
-            state_timer=self.on_state_duration,
-            state_change_conditions={Event.Tup: "CAMERA_OFF",
-                                     Event.Port2In: 'CAMERA_OFF',
+            state_name="small_reward_state",
+            state_timer=self.middle_valve_opening_time,
+            state_change_conditions={Event.Tup: "turn_on_leds"},
+            output_actions=[Output.Valve2]
+        )
+
+        self.bpod.add_state(
+            state_name="turn_on_leds",
+            state_timer=self.settings.response_time,
+            state_change_conditions={Event.Tup: "END_TRIAL",
+                                     Event.Port1In: self.left_poke_action,
+                                     Event.Port3In: self.right_poke_action,
                                      },
-            output_actions=[("SoftCode", self.SOFTCODE_CAMERA_ACCEPT)],
+            output_actions=[("SoftCode", self.SOFTCODE_CAMERA_ACCEPT),
+                            *self.cues],
         )
 
         self.bpod.add_state(
-            state_name="CAMERA_OFF",
+            state_name="reward_state",
+            state_timer=self.valve_opening_time,
+            state_change_conditions={Event.Tup: "END_TRIAL"},
+            output_actions=[self.valve_to_open,
+                            ("SoftCode", self.SOFTCODE_CAMERA_REFUSE)],
+        )
+
+        self.bpod.add_state(
+            state_name="no_reward_state",
             state_timer=0,
-            state_change_conditions={Event.Tup: "EXIT"},
+            state_change_conditions={Event.Tup: "END_TRIAL"},
             output_actions=[("SoftCode", self.SOFTCODE_CAMERA_REFUSE)],
         )
 
         self.bpod.add_state(
-            state_name="EXIT",
-            state_timer=1,
+            state_name="END_TRIAL",
+            state_timer=self.settings.iti_time,
             state_change_conditions={Event.Tup: "exit"},
             output_actions=[("SoftCode", self.SOFTCODE_LED_OFF)],
         )
