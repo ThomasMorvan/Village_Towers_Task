@@ -103,7 +103,8 @@ class LedPicker():
         print(f"NRWD - cm: {self._current_no_reward_positions_cm}, "
               f"LEDs: {self._current_no_reward_leds}")
 
-    def update_mu(self, rwd_density: float | None = None, no_rwd_density: float | None = None):
+    def update_mu(self, rwd_density: float | None = None,
+                  no_rwd_density: float | None = None):
         """Update the mu parameters."""
         if rwd_density is not None:
             self.mu_reward = rwd_density

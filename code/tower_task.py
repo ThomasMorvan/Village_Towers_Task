@@ -1,5 +1,7 @@
 
+from collections import deque
 import numpy as np
+import json
 from village.custom_classes.task import Event
 from village.settings import settings
 from village.manager import manager
@@ -19,6 +21,8 @@ class TowersTask(TowersTaskBase):
         self.on_state_duration = 300
         self.led_on_duration = 0.2  # Led on in (s)  # TODO: add in settings
         self._furthest_x = -1
+        self._this_trial_leds = {TrialSide.LEFT: np.array([], dtype=int),
+                                 TrialSide.RIGHT: np.array([], dtype=int)}
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []  # sorted list of (trigger_x, led_idx)
@@ -27,6 +31,7 @@ class TowersTask(TowersTaskBase):
         self.left_or_right = LeftOrRight()
         self.current_trial_rwd_side: TrialSide = TrialSide.NONE
         self.is_trial_correct: bool = None
+        self.animal_trace = deque(maxlen=25*5)
 
         self.REWARDED_DENSITY = 7.7  # TODO: add in settings
         self.NO_REWARD_DENSITY = 2.3  # TODO: add in settings
@@ -41,7 +46,7 @@ class TowersTask(TowersTaskBase):
 
         Right side: 0-71 maps directly (entry end = index 0).
         Left side: reversed and shifted (index 0 maps to the entry end of the
-        left corridor (physical 154), index 71 maps to the far end (physical 83).
+        corridor (physical 154), index 71 maps to the far end (physical 83).
           physical = LEFT_SIDE_OFFSET + (NUM_LEDS - 1) - leds
         """
         LEFT_SIDE_OFFSET = 83
@@ -79,21 +84,26 @@ class TowersTask(TowersTaskBase):
                                                   TrialSide.RIGHT)
             map_no_rwd_leds = self._to_strip_indices(no_rwd_leds,
                                                      TrialSide.LEFT)
+            self._this_trial_leds[TrialSide.RIGHT] = rwd_leds
+            self._this_trial_leds[TrialSide.LEFT] = no_rwd_leds
         elif self.current_trial_rwd_side == TrialSide.LEFT:
             map_rwd_leds = self._to_strip_indices(rwd_leds,
                                                   TrialSide.LEFT)
             map_no_rwd_leds = self._to_strip_indices(no_rwd_leds,
                                                      TrialSide.RIGHT)
+            self._this_trial_leds[TrialSide.LEFT] = rwd_leds
+            self._this_trial_leds[TrialSide.RIGHT] = no_rwd_leds
         else:
             raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
 
         self.available_leds_idx.update(map_rwd_leds)
         self.available_leds_idx.update(map_no_rwd_leds)
         if verbose:
-            print(f"Trial {self.current_trial_rwd_side.value}: "
-                  f"{len(rwd_leds)} RWD LEDs at {rwd_leds} ({map_rwd_leds}), "
-                  f"{len(no_rwd_leds)} NO RWD LEDs at {no_rwd_leds} ({map_no_rwd_leds})"
-                  )
+            print(f"   * Trial {self.current_trial_rwd_side.value}")
+            print(f"     - {len(rwd_leds)} RWD LEDs idx:{rwd_leds} "
+                  f"--> LED map: {map_rwd_leds}")
+            print(f"     - {len(no_rwd_leds)} NO RWD LEDs idx:{no_rwd_leds} "
+                  f"--> LED map: {map_no_rwd_leds}")
 
         self._build_led_triggers()
         self._build_led_pos()
@@ -115,6 +125,11 @@ class TowersTask(TowersTaskBase):
         self.next_trigger = self.led_triggers[0][0] if self.led_triggers else 0
 
     def softcode_callback(self):
+        if self.current_x is not None and self.current_y is not None:
+            self.animal_trace.append((int(self.current_x),
+                                      int(self.current_y)))
+            self.cam_box.items_to_draw["animal_trace"] = self.animal_trace
+
         self.debug_color_state_leds()
 
         # If no more LED triggers, do nothing
@@ -193,7 +208,34 @@ class TowersTask(TowersTaskBase):
             output_actions=[("SoftCode", self.SOFTCODE_LED_OFF)],
         )
 
+    def current_trial_is_correct(self) -> bool | None:
+        """Determine if the trial was correct based on the first poke."""
+        if self.current_trial_rwd_side == TrialSide.NONE:
+            return None
+
+        port_to_side = {"Port1In": TrialSide.LEFT,
+                        "Port3In": TrialSide.RIGHT}
+        first_poke = next((e for e in self.trial_data["ordered_list_of_events"]
+                           if e in port_to_side), None)
+        return port_to_side.get(first_poke) == self.current_trial_rwd_side
+
     def after_trial(self):
+        self.register_value("trial_leds",
+                            json.dumps({TrialSide.LEFT.value:
+                                        self._this_trial_leds[TrialSide.LEFT],
+                                        TrialSide.RIGHT.value:
+                                        self._this_trial_leds[TrialSide.RIGHT]
+                                        }))
+        self.register_value("trial_side", self.current_trial_rwd_side.value)
+        self.register_value("water", self.settings.reward_amount_ml)
+
+        self.is_trial_correct = self.current_trial_is_correct()
+        self.register_value("trial_correct", self.is_trial_correct)
+
+        print(f"Trial result: side={self.current_trial_rwd_side.value}, "
+              f"correct={self.is_trial_correct}, "
+              f"leds={self._this_trial_leds}")
+
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []
@@ -202,8 +244,11 @@ class TowersTask(TowersTaskBase):
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
         self.cam_box.items_to_draw["led_pos"] = []
+        self.animal_trace = deque(maxlen=25 * 5)
+        self.cam_box.items_to_draw["animal_trace"] = self.animal_trace
         self.left_or_right.add_trial(
-            TrialResult(side=self.current_trial_rwd_side, correct=self.is_trial_correct)
+            TrialResult(side=self.current_trial_rwd_side,
+                        correct=self.is_trial_correct)
                         )
         self.current_trial_rwd_side = TrialSide.NONE
         self.is_trial_correct = None

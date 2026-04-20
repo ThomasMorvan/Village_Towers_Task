@@ -10,6 +10,7 @@ class DrawFurthestX(CameraDrawBase):
         self.furthest_x = -1
         self.next_trigger = 0
         self.led_pos = []
+        self.animal_trace = []
 
     def draw(self, cam: CameraBase) -> None:
         """Draws a vertical line at furthest_x on the frame.
@@ -47,4 +48,20 @@ class DrawFurthestX(CameraDrawBase):
                     (pos, cam.height),
                     (0, 255, 0),
                     2,
+                )
+
+        self.animal_trace = list(cam.items_to_draw.get("animal_trace", []))
+        n = len(self.animal_trace)
+        if n > 1:
+            maxlen = 25*5
+            for i in range(1, n):
+                age = n - 1 - i  # 0 = newest, maxlen-1 = oldest
+                intensity = max(0, int(255 * (maxlen - age) / maxlen))
+                cv2.line(
+                    cam.frame,
+                    self.animal_trace[i - 1],
+                    self.animal_trace[i],
+                    (0, intensity, intensity),
+                    2,
+                    cv2.LINE_AA,
                 )
