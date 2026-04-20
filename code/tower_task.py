@@ -20,13 +20,13 @@ class TowersTask(TowersTaskBase):
         super().__init__()
         self.on_state_duration = 300
         self.led_on_duration = 0.2  # Led on in (s)  # TODO: add in settings
-        self._furthest_x = -1
+        self._furthest_x = 641  # FIXME: self.cam_box.width not initialized yet
         self._this_trial_leds = {TrialSide.LEFT: np.array([], dtype=int),
                                  TrialSide.RIGHT: np.array([], dtype=int)}
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []  # sorted list of (trigger_x, led_idx)
-        self.next_trigger = -1   # display only: x position of leds
+        self.next_trigger = 641   # display only: x position of leds
         self.distance_offset = 50  # FIXME: px in front of centroid for trigger
         self.left_or_right = LeftOrRight()
         self.current_trial_rwd_side: TrialSide = TrialSide.NONE
@@ -119,8 +119,9 @@ class TowersTask(TowersTaskBase):
         """Pre-compute sorted (trigger_x, led_idx) list
         from current available_leds_idx."""
         self.led_triggers = sorted(
-            [(self.led_positions[i].x_hat - self.distance_offset, int(i))
-             for i in self.available_leds_idx]
+            [(self.led_positions[i].x_hat + self.distance_offset, int(i))
+             for i in self.available_leds_idx],
+            reverse=True
         )
         self.next_trigger = self.led_triggers[0][0] if self.led_triggers else 0
 
@@ -137,7 +138,7 @@ class TowersTask(TowersTaskBase):
             return
 
         # If current position hasn't passed furthest_x, do nothing
-        if self.current_x <= self._furthest_x:
+        if self.current_x >= self._furthest_x:
             return
 
         # Update furthest_x and display it
@@ -145,12 +146,12 @@ class TowersTask(TowersTaskBase):
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
 
         # If furthest_x hasn't passed next_trigger, do nothing
-        if self._furthest_x < self.next_trigger:
+        if self._furthest_x > self.next_trigger:
             return
 
         # Fire all LEDs whose trigger has been crossed
         while (self.led_triggers and
-               self._furthest_x >= self.led_triggers[0][0]):
+               self._furthest_x <= self.led_triggers[0][0]):
             trigger_x, led_idx = self.led_triggers.pop(0)
             self.current_led = led_idx
             manager.run_softcode_function(self.SOFTCODE_SINGLE_LED_ON)
@@ -163,7 +164,7 @@ class TowersTask(TowersTaskBase):
         if self.led_triggers:
             self.next_trigger = self.led_triggers[0][0]
         else:
-            self.next_trigger = -1
+            self.next_trigger = 641
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
     def debug_color_state_leds(self):
@@ -239,8 +240,8 @@ class TowersTask(TowersTaskBase):
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []
-        self.next_trigger = -1
-        self._furthest_x = -1
+        self.next_trigger = 641
+        self._furthest_x = 641
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
         self.cam_box.items_to_draw["led_pos"] = []
