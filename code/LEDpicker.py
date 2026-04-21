@@ -18,12 +18,14 @@ class LedPicker():
     def __init__(self,
                  rwd_density: float = 10,
                  no_rwd_density: float = 1,
+                 start_dead_zone_cm: float = 0,
                  rng: np.random.Generator | None = None):
 
         self.L = self.APPARATUS_LENGTH
         self.mu_reward = rwd_density
         self.mu_no_reward = no_rwd_density
         self.refractory_period = self.REFRACTORY_PERIOD
+        self.start_dead_zone_cm = start_dead_zone_cm
         self.rng = rng or np.random.default_rng()
         self.verify_parameters()
 
@@ -35,6 +37,10 @@ class LedPicker():
     def verify_parameters(self):
         if self.L <= 0:
             raise ValueError("L must be > 0")
+        if self.start_dead_zone_cm < 0:
+            raise ValueError("start_dead_zone_cm must be >= 0")
+        if self.start_dead_zone_cm >= self.L:
+            raise ValueError("start_dead_zone_cm must be < L")
         if self.refractory_period <= 0:
             raise ValueError("refractory_period must be > 0")
         if self.mu_reward < 0:
@@ -55,24 +61,30 @@ class LedPicker():
             y : np.ndarray = list of locations of towers in range [0, L].
         """
 
+        # Placement range is [start_dead_zone_cm, L]
+        L_placeable = self.L - self.start_dead_zone_cm
+
         # 1-2) Draw n ~ Poisson(mu) that is less than the maximum
         # possible number of towers given the refractory period
-        maxN = int(np.floor(self.L / self.refractory_period))
+        maxN = int(np.floor(L_placeable / self.refractory_period))
         while True:
             n = int(self.rng.poisson(mu))
             if n <= maxN:
                 break
 
-        # 3-6) Randomly distribute locations within [0, L], but
+        # 3-6) Randomly distribute locations within [0, L_placeable], but
         # impose refractory interval
-        Leffective = self.L - ((n - 1) * self.refractory_period)
+        Leffective = L_placeable - ((n - 1) * self.refractory_period)
         y = self.rng.uniform(0.0, 1.0, size=n)
         y = np.sort(y)
         y = y * Leffective + np.arange(n) * self.refractory_period
 
         # 7-8) Randomly rotate to get rid of edge artifacts and wrap around
-        y = y + float(self.rng.uniform(0.0, self.L))
-        y = np.where(y > self.L, y - self.L, y)
+        y = y + float(self.rng.uniform(0.0, L_placeable))
+        y = np.where(y > L_placeable, y - L_placeable, y)
+
+        # Offset into the valid placement region (past the dead zone)
+        y = y + self.start_dead_zone_cm
         return np.sort(np.round(y, rounding))
 
     def draw_towers(self) -> tuple[np.ndarray, np.ndarray]:

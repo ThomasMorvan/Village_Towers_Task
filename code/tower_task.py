@@ -34,8 +34,10 @@ class TowersTask(TowersTaskBase):
 
         self.REWARDED_DENSITY = 7.7  # TODO: add in settings
         self.NO_REWARD_DENSITY = 2.3  # TODO: add in settings
+        self.LED_START_DEAD_ZONE_CM = 0  # TODO: add in settings
         self.led_picker = LedPicker(rwd_density=self.REWARDED_DENSITY,
-                                    no_rwd_density=self.NO_REWARD_DENSITY)
+                                    no_rwd_density=self.NO_REWARD_DENSITY,
+                                    start_dead_zone_cm=self.LED_START_DEAD_ZONE_CM)
 
 
         self.trial_is_cued = True
@@ -141,6 +143,7 @@ class TowersTask(TowersTaskBase):
             reverse=True
         )
         self.next_trigger = self.led_triggers[0][0] if self.led_triggers else 0
+        self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
     def softcode_callback(self):
         if self.current_x is not None and self.current_y is not None:
