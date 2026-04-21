@@ -37,9 +37,7 @@ class TowersTask(TowersTaskBase):
         self.led_picker = LedPicker(rwd_density=self.REWARDED_DENSITY,
                                     no_rwd_density=self.NO_REWARD_DENSITY)
 
-        self.settings.punishment_time = 1  # Time in seconds for punishment
-        self.settings.iti_time = 0.5
-        self.settings.response_time = 25  # Time in seconds to respond before timeout
+
         self.trial_is_cued = True
         self.give_free_reward = True
 
@@ -62,7 +60,7 @@ class TowersTask(TowersTaskBase):
         return leds
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [75, 290, 555, 320, 65])
+        settings.set("AREA1_BOX", [65, 280, 600, 325, 65])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "OFF")
         settings.set("USAGE3_BOX", "OFF")
@@ -83,6 +81,8 @@ class TowersTask(TowersTaskBase):
         self.right_valve_opening_time = 2  # self.water_calibration.get_valve_time(
         #     port=3, volume=self.settings.big_reward_amount_ml
         # )
+        self.settings.iti_time = 0
+        self.settings.response_time = 60  # Time in seconds to respond before timeout
 
     def get_LEDs_for_trial(self, verbose=True):
         # Draw trial side (left or right).
@@ -185,6 +185,7 @@ class TowersTask(TowersTaskBase):
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
     def debug_color_state_leds(self):
+        return
         for idx in range(self.led_strip.num_leds):
             color = self.COLOR_UNSELECTED
             if idx in self.available_leds_idx:
@@ -213,6 +214,8 @@ class TowersTask(TowersTaskBase):
             if self.trial_is_cued:
                 self.cues.append((Output.PWM1,
                                   self.settings.light_intensity_high))
+                self.cues.append((Output.PWM3,
+                                  self.settings.light_intensity_low))
         elif self.current_trial_rwd_side == TrialSide.RIGHT:
             self.right_poke_action = "reward_state"
             self.valve_to_open = Output.Valve3
@@ -221,6 +224,8 @@ class TowersTask(TowersTaskBase):
             if self.trial_is_cued:
                 self.cues.append((Output.PWM3,
                                   self.settings.light_intensity_high))
+                self.cues.append((Output.PWM1,
+                                  self.settings.light_intensity_low))
         else:
             raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
 
@@ -286,12 +291,11 @@ class TowersTask(TowersTaskBase):
         return port_to_side.get(first_poke) == self.current_trial_rwd_side
 
     def after_trial(self):
-        self.register_value("trial_leds",
-                            json.dumps({TrialSide.LEFT.value:
-                                        self._this_trial_leds[TrialSide.LEFT],
-                                        TrialSide.RIGHT.value:
-                                        self._this_trial_leds[TrialSide.RIGHT]
-                                        }))
+        self.register_value(f"{TrialSide.LEFT.value} LEDs",
+                            self._this_trial_leds[TrialSide.LEFT].tolist())
+        self.register_value(f"{TrialSide.RIGHT.value} LEDs",
+                            self._this_trial_leds[TrialSide.RIGHT].tolist())
+
         self.register_value("trial_side", self.current_trial_rwd_side.value)
         self.register_value("water", self.settings.reward_amount_ml)
 
