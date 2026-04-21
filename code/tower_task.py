@@ -233,14 +233,19 @@ class TowersTask(TowersTaskBase):
             raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
 
         # Start state: wait for poke in middle port to start trial
-        # FIXME: this step should be skippable by animal at first trial.
+        # On trial 1, Tup after 60s so the animal isn't forced to poke,
+        # but Port2In still works (free drop if give_free_reward is set).
+        start_conditions = {Event.Port2In: self.middle_poke_action}
+        first_trial_timer = 0
+        if self.current_trial == 1:
+            start_conditions[Event.Tup] = "turn_on_leds"
+            first_trial_timer = 60  # FIXME: add in settings
+
         self.bpod.add_state(
             state_name="START",
-            state_timer=0,
-            state_change_conditions={Event.Port2In: self.middle_poke_action},
-            output_actions=[(Output.PWM2, self.settings.light_intensity_high),
-                            ]
-        )
+            state_timer=first_trial_timer,
+            state_change_conditions=start_conditions,
+            output_actions=[(Output.PWM2, self.settings.light_intensity_high)])
 
         self.bpod.add_state(
             state_name="small_reward_state",
