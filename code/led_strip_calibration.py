@@ -27,8 +27,8 @@ class LedStripCalibration(TowersTaskBase):
         self.settle_time = 0.05  # duration (s) between LED ON and frame cap
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [60, 285, 560, 292, 200])  # L, T, R, B, Thr
-        settings.set("AREA2_BOX", [60, 311, 560, 318, 200])
+        settings.set("AREA1_BOX", [55, 220, 585, 230, 200])  # L, T, R, B, Thr
+        settings.set("AREA2_BOX", [55, 248, 585, 258, 200])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "ALLOWED")
         settings.set("USAGE3_BOX", "OFF")

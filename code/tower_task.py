@@ -34,11 +34,10 @@ class TowersTask(TowersTaskBase):
 
         self.REWARDED_DENSITY = 7.7  # TODO: add in settings
         self.NO_REWARD_DENSITY = 2.3  # TODO: add in settings
-        self.LED_START_DEAD_ZONE_CM = 0  # TODO: add in settings
+        self.LED_START_DEAD_ZONE_CM = 10  # TODO: add in settings
         self.led_picker = LedPicker(rwd_density=self.REWARDED_DENSITY,
                                     no_rwd_density=self.NO_REWARD_DENSITY,
                                     start_dead_zone_cm=self.LED_START_DEAD_ZONE_CM)
-
 
         self.trial_is_cued = True
         self.give_free_reward = True
@@ -62,7 +61,7 @@ class TowersTask(TowersTaskBase):
         return leds
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [65, 280, 600, 325, 65])
+        settings.set("AREA1_BOX", [55, 220, 585, 258, 65])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "OFF")
         settings.set("USAGE3_BOX", "OFF")
@@ -74,13 +73,13 @@ class TowersTask(TowersTaskBase):
         self.maximum_number_of_trials = 10
         self.load_led_calibration()
 
-        self.left_valve_opening_time = 2  # self.water_calibration.get_valve_time(
+        self.left_valve_opening_time = 1  # self.water_calibration.get_valve_time(
         #     port=1, volume=self.settings.big_reward_amount_ml
         # )
-        self.middle_valve_opening_time = .5  # self.water_calibration.get_valve_time(
+        self.middle_valve_opening_time = .250  # self.water_calibration.get_valve_time(
         #     port=2, volume=self.settings.small_reward_amount_ml
         # )
-        self.right_valve_opening_time = 2  # self.water_calibration.get_valve_time(
+        self.right_valve_opening_time = 1  # self.water_calibration.get_valve_time(
         #     port=3, volume=self.settings.big_reward_amount_ml
         # )
         self.settings.iti_time = 0
@@ -130,8 +129,7 @@ class TowersTask(TowersTaskBase):
 
     def _build_led_pos(self):
         self.cam_box.items_to_draw["led_pos"] = sorted(
-            [self.led_positions[i].x_hat
-                for i in self.available_leds_idx]
+            [self.led_positions[i] for i in self.available_leds_idx]
             )
 
     def _build_led_triggers(self):
@@ -206,7 +204,7 @@ class TowersTask(TowersTaskBase):
         if self.give_free_reward:
             self.middle_poke_action = "small_reward_state"
         else:
-            self.middle_poke_action = "turn_on_leds"
+            self.middle_poke_action = "END_TRIAL"
 
         self.cues = []
         if self.current_trial_rwd_side == TrialSide.LEFT:
@@ -232,26 +230,11 @@ class TowersTask(TowersTaskBase):
         else:
             raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
 
-        # Start state: wait for poke in middle port to start trial
-        # On trial 1, Tup after 60s so the animal isn't forced to poke,
-        # but Port2In still works (free drop if give_free_reward is set).
-        start_conditions = {Event.Port2In: self.middle_poke_action}
-        first_trial_timer = 0
-        if self.current_trial == 1:
-            start_conditions[Event.Tup] = "turn_on_leds"
-            first_trial_timer = 60  # FIXME: add in settings
-
         self.bpod.add_state(
             state_name="START",
-            state_timer=first_trial_timer,
-            state_change_conditions=start_conditions,
-            output_actions=[(Output.PWM2, self.settings.light_intensity_high)])
-
-        self.bpod.add_state(
-            state_name="small_reward_state",
-            state_timer=self.middle_valve_opening_time,
+            state_timer=0,
             state_change_conditions={Event.Tup: "turn_on_leds"},
-            output_actions=[Output.Valve2]
+            output_actions=[]
         )
 
         self.bpod.add_state(
@@ -268,7 +251,7 @@ class TowersTask(TowersTaskBase):
         self.bpod.add_state(
             state_name="reward_state",
             state_timer=self.valve_opening_time,
-            state_change_conditions={Event.Tup: "END_TRIAL"},
+            state_change_conditions={Event.Tup: "GO_BACK_TO_START"},
             output_actions=[self.valve_to_open,
                             ("SoftCode", self.SOFTCODE_CAMERA_REFUSE)],
         )
@@ -276,8 +259,21 @@ class TowersTask(TowersTaskBase):
         self.bpod.add_state(
             state_name="no_reward_state",
             state_timer=0,
-            state_change_conditions={Event.Tup: "END_TRIAL"},
+            state_change_conditions={Event.Tup: "GO_BACK_TO_START"},
             output_actions=[("SoftCode", self.SOFTCODE_CAMERA_REFUSE)],
+        )
+
+        self.bpod.add_state(
+            state_name="GO_BACK_TO_START",
+            state_timer=0,
+            state_change_conditions={Event.Port2In: self.middle_poke_action},
+            output_actions=[(Output.PWM2, self.settings.light_intensity_high)])
+
+        self.bpod.add_state(
+            state_name="small_reward_state",
+            state_timer=self.middle_valve_opening_time,
+            state_change_conditions={Event.Tup: "END_TRIAL"},
+            output_actions=[Output.Valve2]
         )
 
         self.bpod.add_state(
