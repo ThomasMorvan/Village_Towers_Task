@@ -30,6 +30,7 @@ class Test_Photogates(Task):
             state_change_conditions={Event.Port1Out: 'Waiting',
                                      Event.Tup: 'exit'},
             output_actions=[(Output.PWM1, self.settings.light_intensity_high),
+                            Output.Valve1,
                             Output.SoftCode6])
 
         self.bpod.add_state(
@@ -38,6 +39,7 @@ class Test_Photogates(Task):
             state_change_conditions={Event.Port2Out: 'Waiting',
                                      Event.Tup: 'exit'},
             output_actions=[(Output.PWM2, self.settings.light_intensity_high),
+                            Output.Valve2,
                             Output.SoftCode7])
 
         self.bpod.add_state(
@@ -46,6 +48,7 @@ class Test_Photogates(Task):
             state_change_conditions={Event.Port3Out: 'Waiting',
                                      Event.Tup: 'exit'},
             output_actions=[(Output.PWM3, self.settings.light_intensity_high),
+                            Output.Valve3,
                             Output.SoftCode8])
 
     def _print(self, idx):
