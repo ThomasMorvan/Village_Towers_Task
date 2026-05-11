@@ -63,7 +63,7 @@ class TowersTaskBase(Task):
 
     CALIBRATION_PATH: str = "led_strip_calibration"
 
-    COLOR_ON = Color(255, 255, 255)
+    COLOR_ON = Color(10, 10, 10)#(255, 255, 255)
     COLOR_OFF = Color(0, 0, 0)
     COLOR_SELECTED = Color(0, 10, 0)
     COLOR_UNSELECTED = Color(10, 0, 0)
