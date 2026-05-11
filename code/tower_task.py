@@ -2,7 +2,8 @@
 from collections import deque
 import numpy as np
 import json
-from village.custom_classes.task import Event, Output
+from village.custom_classes.task import (BpodEvent as Event,
+                                         BpodOutput as Output)
 from village.settings import settings
 from village.manager import manager
 from tower_task_base import TowersTaskBase

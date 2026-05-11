@@ -1,9 +1,11 @@
-from village.classes.abstract_classes import CameraBase
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 from village.custom_classes.camera_trigger_base import CameraTriggerBase
 from village.manager import manager
 
-# Overriding CameraTriggerBase to run a softcode at every frame processed.
-# Here softcode updates detected (x, y) position in Task so we can react to it.
+if TYPE_CHECKING:
+    from village.devices.camera import Camera
 
 
 class LEDTrigger(CameraTriggerBase):
@@ -11,12 +13,12 @@ class LEDTrigger(CameraTriggerBase):
         """Initializes the CameraTriggerBase instance."""
         self.name = "LED Trigger"
 
-    def trigger(self, cam: CameraBase) -> None:
+    def trigger(self, cam: Camera) -> None:
         """Called everytime a frame is processed. Here softcode13 updates
         detected (x, y) position in Task so we can react to it.
 
         Args:
-            cam (CameraBase): The camera instance providing the trigger status.
+            cam (Camera): The camera instance providing the trigger status.
         """
 
         manager.run_softcode_function(3)

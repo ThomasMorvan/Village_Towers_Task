@@ -2,6 +2,7 @@ import random
 import pandas as pd
 
 from village.custom_classes.auto_no_mouse_base import AutoNoMouse_Base
+from village.custom_classes.task import Task
 from left_or_right import TrialSide
 
 
@@ -47,10 +48,9 @@ class AutoNoMouse(AutoNoMouse_Base):
     T_REWARD_DUR: float = 0.2    # reward state duration
     T_NO_REWARD_DUR: float = 0.01
 
-    def __init__(self, task,
+    def __init__(self, task: Task=None,
                  accuracy_left: float = 0.75,
-                 accuracy_right: float = 0.75,
-                 ) -> None:
+                 accuracy_right: float = 0.75) -> None:
         super().__init__(task)
         self.accuracy_left = accuracy_left
         self.accuracy_right = accuracy_right

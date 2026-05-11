@@ -1,4 +1,5 @@
-from village.custom_classes.task import Event, Output, Task
+from village.custom_classes.task import (BpodEvent as Event,
+                                         BpodOutput as Output, Task)
 
 
 class Test_Photogates(Task):

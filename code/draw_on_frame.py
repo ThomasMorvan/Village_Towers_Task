@@ -1,6 +1,10 @@
+from __future__ import annotations
 import cv2
-from village.classes.abstract_classes import CameraBase
+from typing import TYPE_CHECKING
 from village.custom_classes.camera_draw_base import CameraDrawBase
+
+if TYPE_CHECKING:
+    from village.devices.camera import Camera
 
 
 class DrawFurthestX(CameraDrawBase):
@@ -11,7 +15,7 @@ class DrawFurthestX(CameraDrawBase):
         self.led_pos = []
         self.animal_trace = []
 
-    def draw(self, cam: CameraBase) -> None:
+    def draw(self, cam: Camera) -> None:
         self.furthest_x = cam.items_to_draw.get("furthest_x", -1)
         self.next_trigger = cam.items_to_draw.get("next_trigger", -1)
         self.led_pos = cam.items_to_draw.get("led_pos", -1)
