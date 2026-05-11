@@ -202,26 +202,26 @@ class TowersTask(TowersTaskBase):
         self.get_LEDs_for_trial()
 
         if self.give_free_reward:
-            self.middle_poke_action = "small_reward_state"
+            self.middle_poke_action = "SMALL REWARD"
         else:
-            self.middle_poke_action = "END_TRIAL"
+            self.middle_poke_action = "END TRIAL"
 
         self.cues = []
         if self.current_trial_rwd_side == TrialSide.LEFT:
-            self.left_poke_action = "reward_state"
+            self.left_poke_action = "REWARD"
             self.valve_to_open = Output.Valve1
             self.valve_opening_time = self.left_valve_opening_time
-            self.right_poke_action = "no_reward_state"
+            self.right_poke_action = "NO REWARD"
             if self.trial_is_cued:
                 self.cues.append((Output.PWM1,
                                   self.settings.light_intensity_high))
                 self.cues.append((Output.PWM3,
                                   self.settings.light_intensity_low))
         elif self.current_trial_rwd_side == TrialSide.RIGHT:
-            self.right_poke_action = "reward_state"
+            self.right_poke_action = "REWARD"
             self.valve_to_open = Output.Valve3
             self.valve_opening_time = self.right_valve_opening_time
-            self.left_poke_action = "no_reward_state"
+            self.left_poke_action = "NO REWARD"
             if self.trial_is_cued:
                 self.cues.append((Output.PWM3,
                                   self.settings.light_intensity_high))
@@ -231,16 +231,16 @@ class TowersTask(TowersTaskBase):
             raise ValueError(f"Invalid trial: {self.current_trial_rwd_side}")
 
         self.bpod.add_state(
-            state_name="START",
+            state_name="START TRIAL",
             state_timer=0,
-            state_change_conditions={Event.Tup: "turn_on_leds"},
+            state_change_conditions={Event.Tup: "WAIT FOR CHOICE POKE"},
             output_actions=[]
         )
 
         self.bpod.add_state(
-            state_name="turn_on_leds",
+            state_name="WAIT FOR CHOICE POKE",
             state_timer=self.settings.response_time,
-            state_change_conditions={Event.Tup: "END_TRIAL",
+            state_change_conditions={Event.Tup: "END TRIAL",
                                      Event.Port1In: self.left_poke_action,
                                      Event.Port3In: self.right_poke_action,
                                      },
@@ -249,35 +249,35 @@ class TowersTask(TowersTaskBase):
         )
 
         self.bpod.add_state(
-            state_name="reward_state",
+            state_name="REWARD",
             state_timer=self.valve_opening_time,
-            state_change_conditions={Event.Tup: "GO_BACK_TO_START"},
+            state_change_conditions={Event.Tup: "POKE MIDDLE"},
             output_actions=[self.valve_to_open,
                             ("SoftCode", self.SOFTCODE_CAMERA_REFUSE)],
         )
 
         self.bpod.add_state(
-            state_name="no_reward_state",
+            state_name="NO REWARD",
             state_timer=0,
-            state_change_conditions={Event.Tup: "GO_BACK_TO_START"},
+            state_change_conditions={Event.Tup: "POKE MIDDLE"},
             output_actions=[("SoftCode", self.SOFTCODE_CAMERA_REFUSE)],
         )
 
         self.bpod.add_state(
-            state_name="GO_BACK_TO_START",
+            state_name="POKE MIDDLE",
             state_timer=0,
             state_change_conditions={Event.Port2In: self.middle_poke_action},
             output_actions=[(Output.PWM2, self.settings.light_intensity_high)])
 
         self.bpod.add_state(
-            state_name="small_reward_state",
+            state_name="SMALL REWARD",
             state_timer=self.middle_valve_opening_time,
-            state_change_conditions={Event.Tup: "END_TRIAL"},
+            state_change_conditions={Event.Tup: "END TRIAL"},
             output_actions=[Output.Valve2]
         )
 
         self.bpod.add_state(
-            state_name="END_TRIAL",
+            state_name="END TRIAL",
             state_timer=self.settings.iti_time,
             state_change_conditions={Event.Tup: "exit"},
             output_actions=[("SoftCode", self.SOFTCODE_LED_OFF)],
