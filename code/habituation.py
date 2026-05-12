@@ -1,4 +1,5 @@
-from village.custom_classes.task import Event, Output, Task
+from village.custom_classes.task import (BpodEvent as Event,
+                                         BpodOutput as Output, Task)
 
 
 # click on the link below to see the documentation about how to create
