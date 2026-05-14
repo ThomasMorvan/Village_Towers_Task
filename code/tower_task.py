@@ -129,7 +129,7 @@ class TowersTask(TowersTaskBase):
         self.debug_color_state_leds()
 
     def _build_led_pos(self):
-        self.cam_box.items_to_draw["led_pos"] = sorted(
+        self.cam_box.items_to_draw["led_pos"] = (
             [self.led_positions[i] for i in self.available_leds_idx]
             )
 
@@ -306,6 +306,16 @@ class TowersTask(TowersTaskBase):
 
         self.is_trial_correct = self.current_trial_is_correct()
         self.register_value("trial_correct", self.is_trial_correct)
+
+        # LED picker info
+        self.register_value("rwd_density", self.led_picker.mu_reward)
+        self.register_value("no_rwd_density", self.led_picker.mu_no_reward)
+
+        # Left or Right trial info
+        self.register_value("pR", self.left_or_right.current_PR)
+        self.register_value("empR", self.left_or_right.current_empR)
+        self.register_value("draw_side", self.left_or_right.current_draw_side.value)
+        self.register_value("draw_prob", self.left_or_right.current_draw_prob)
 
         print(f"Trial result: side={self.current_trial_rwd_side.value}, "
               f"correct={self.is_trial_correct}, "

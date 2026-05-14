@@ -52,10 +52,23 @@ class LeftOrRight:
         self._cache_hg_empirical = self.half_gaussian(self.WINDOW_SIZE,
                                                       self.SIGMA_EMPIRICAL)
 
+        self.current_PR = -1
+        self.current_empR = -1
+        self.current_draw_side = TrialSide.NONE
+        self.current_draw_prob = -1
+
         self.PRs = []
         self.empirical_Rs = []
         self.sides = []
         self.draw_probabilities = []
+
+    def get_current_state(self):
+        return {
+            "pR": self.current_PR,
+            "empR": self.current_empR,
+            "draw_side": self.current_draw_side,
+            "draw_prob": self.current_draw_prob
+        }
 
     @staticmethod
     def half_gaussian(n: int, sigma: float) -> np.ndarray:
@@ -132,6 +145,11 @@ class LeftOrRight:
         side = (TrialSide.RIGHT if np.random.rand() < draw_prob
                 else TrialSide.LEFT)
 
+        self.current_PR = pR
+        self.current_empR = empR
+        self.current_draw_side = side
+        self.current_draw_prob = draw_prob
+
         self.PRs.append(pR)
         self.empirical_Rs.append(empR)
         self.sides.append(side)
@@ -179,3 +197,5 @@ if __name__ == "__main__":
     print(f"10k trials: {lefts} L, {rights} R")
 
     test.plot()
+
+    print("Final state:", test.get_current_state())
