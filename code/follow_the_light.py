@@ -52,6 +52,9 @@ class FollowTheLight(Task):
         # the reward amount
         # Make sure to calibrate the valves before using this function, otherwise
         # it will return an Exception
+        self.settings.punishment_time = 1
+        self.settings.iti_time = 1
+
         self.left_valve_opening_time = 1#self.water_calibration.get_valve_time(
         #     port=1, volume=self.settings.reward_amount_ml
         # )
