@@ -25,7 +25,9 @@ class AutoNoMouse(AutoNoMouse_Base):
               AutonomouseParam("p_correct_right", float, 0.75, "p correct R",
                                0.0, 1.0, "P(correct | reward RIGHT)"),
               AutonomouseParam("use_ddm", bool, True, "Use DDM",
-                               0, 1, "1=DDM accumulator, 0=flat accuracy")]
+                               0, 1, "1=DDM accumulator, 0=flat accuracy"),
+              AutonomouseParam("ddm_plot", bool, True, "Plot DDM",
+                               0, 1, "1=Plot DDM acc (debug), 0=Do not plot")]
 
     # Corridor traversal
     X_ENTRY: int = 630        # rightmost x (entry side)
@@ -127,6 +129,9 @@ class AutoNoMouse(AutoNoMouse_Base):
             self.task.softcode_callback()
             self.acc.step(n=self._acc_steps)
             self.wait(self.FRAMES_PER_STEP / self.FPS)
+
+        if self.ddm_plot:
+            self.acc.plot(L_pos, R_pos)
 
         # 2. Choose side via accumulator P(right), move, and poke.
         chosen = self._choose_ddm() if self.use_ddm else self._choose_accuracy(

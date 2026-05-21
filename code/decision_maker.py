@@ -11,7 +11,9 @@ Rest of project and benchmark code is in TowerModel/
 from __future__ import annotations
 from collections import defaultdict
 import math
+from pathlib import Path
 import numpy as np
+import matplotlib.pyplot as plt
 from left_or_right import TrialSide
 
 
@@ -29,6 +31,7 @@ class DecisionMaker:
          phi, tau_phi, bias, lapse) = (float(v) for v in theta)
 
         self._sigma2_i = sigma2_i
+        self._B = B
         self._sigma2_a = sigma2_a
         self._sigma2_s = sigma2_s
         self._lam = lam
@@ -116,6 +119,130 @@ class DecisionMaker:
     def position(self) -> float:
         """Current position in metres."""
         return self._step_idx * self.dt
+
+    def plot(self, L_t, R_t, save_path=None,
+             xlabel='Position (m)',
+             cue_label=('L tower', 'R tower')):
+
+        L_t = np.asarray(L_t)
+        R_t = np.asarray(R_t)
+
+        La = (_adapt_stream(self._phi, self._tau_phi, L_t) if len(L_t)
+              else np.zeros(0))
+        Ra = (_adapt_stream(self._phi, self._tau_phi, R_t) if len(R_t)
+              else np.zeros(0))
+
+        self.reset(L_t, R_t)
+
+        all_pos = np.concatenate([L_t, R_t])
+        max_pos = float(all_pos.max()) if len(all_pos) else 0.0
+        n_steps = int(np.ceil(max(max_pos + 0.3, 1.20) / self.dt))
+
+        xc = self.xc
+        dbin = xc[1] - xc[0]
+        P_trace = np.empty((n_steps + 1, self.n))
+        P_trace[0] = self.P.copy()
+        for i in range(n_steps):
+            self.step(1)
+            P_trace[i + 1] = self.P.copy()
+
+        t_ax = np.arange(n_steps + 1) * self.dt
+        mean_traj = P_trace @ xc
+
+        fig, axes = plt.subplots(2, 2, figsize=(12, 7),
+                                 gridspec_kw={'width_ratios': [3, 1],
+                                              'height_ratios': [4, 1]})
+        axes[1, 1].set_visible(False)
+
+        ax = axes[0, 0]
+        ext = [t_ax[0], t_ax[-1], xc[0], xc[-1]]
+        im = ax.imshow(np.maximum(P_trace.T, 1e-8),
+                       aspect='auto', origin='lower', extent=ext,
+                       cmap='inferno', interpolation='bilinear',
+                       vmin=0, vmax=np.percentile(P_trace, 99.5))
+        for i, t in enumerate(R_t):
+            ax.plot(t, xc[-1] * 0.88, 'v', color='lightgreen', ms=7, mec='w',
+                    mew=0.5, label=cue_label[1] if i == 0 else None)
+        for i, t in enumerate(L_t):
+            ax.plot(t, xc[0] * 0.88, '^', color='red', ms=7, mec='w',
+                    mew=0.5, label=cue_label[0] if i == 0 else None)
+        ax.plot(t_ax, mean_traj, color='white', alpha=0.7,
+                lw=1.2, label='E[a]')
+        ax.axhline(self._bias, color='w', ls='--', alpha=0.6,
+                   lw=1, label='bias')
+        ax.axhline(self._B, color='cyan', ls=':', alpha=0.4, lw=1)
+        ax.axhline(-self._B, color='cyan', ls=':', alpha=0.4, lw=1)
+        ax.set_ylabel('a')
+        ax.tick_params(labelbottom=False)
+        ax.legend()
+        plt.colorbar(im, ax=ax, fraction=0.02, pad=0.02, label='P(a)')
+
+        ax = axes[0, 1]
+        fd = P_trace[-1]
+        cols = ['red' if b < self._bias else 'lightgreen' for b in xc]
+        ax.barh(xc, fd, height=dbin, color=cols, edgecolor='none', alpha=0.75)
+        ax.axhline(self._bias, color='#264653', ls='--', lw=2, label='bias')
+        ax.axhline(self._B, color='#457b9d', ls=':', lw=1.2,
+                   alpha=0.6, label='±B')
+        ax.axhline(-self._B, color='#457b9d', ls=':', lw=1.2, alpha=0.6)
+        p_right = float(np.sum(fd[xc > self._bias]))
+        ax.set_xlabel('P(a, t=T)')
+        ax.set_ylabel('a')
+        ax.legend(fontsize=8)
+        ax.text(max(fd) * 0.3, self._B * 0.6, f'P(R)≈{p_right:.3f}',
+                fontsize=10, fontweight='bold')
+
+        ax = axes[1, 0]
+        ax.sharex(axes[0, 0])
+        n_pts = 60
+        max_pos = t_ax[-1]
+
+        def _recovery(Ca, positions, phi, tau_phi, end_pos):
+            xs, ys = [], []
+            for k in range(len(positions)):
+                p0 = positions[k]
+                p1 = positions[k + 1] if k + 1 < len(positions) else end_pos
+                state = Ca[k] * phi  # channel state right after click k
+                ps = np.linspace(p0, p1, n_pts)
+                s = ps - p0
+                if abs(1.0 - state) < 1e-15:
+                    curve = np.ones(n_pts)
+                elif state <= 1.0:
+                    curve = 1.0 - np.exp(-s / tau_phi) * abs(1.0 - state)
+                else:
+                    curve = 1.0 + np.exp(-s / tau_phi) * abs(1.0 - state)
+                xs.append(ps)
+                ys.append(curve)
+            return np.concatenate(xs), np.concatenate(ys)
+
+        if len(R_t) and len(Ra):
+            xR, cR = _recovery(Ra, R_t, self._phi, self._tau_phi, max_pos)
+            ax.plot(xR, cR, color='lightgreen', lw=1.2, label=cue_label[1])
+            ax.scatter(R_t, Ra, color='lightgreen', s=35, marker='v', zorder=5)
+            for t in R_t:
+                ax.axvline(t, color='lightgreen', lw=0.4, alpha=0.25)
+
+        if len(L_t) and len(La):
+            xL, cL = _recovery(La, L_t, self._phi, self._tau_phi, max_pos)
+            ax.plot(xL, cL, color='red', lw=1.2, label=cue_label[0])
+            ax.scatter(L_t, La, color='red', s=35, marker='^', zorder=5)
+            for t in L_t:
+                ax.axvline(t, color='red', lw=0.4, alpha=0.25)
+
+        ax.axhline(1.0, color='gray', lw=0.5, ls='--', alpha=0.4)
+        ax.set_ylim(-0.05, 1.15)
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel('Ca (adapted weight)')
+        ax.legend(fontsize=8)
+
+        plt.tight_layout()
+        if save_path is None:
+            path = Path(__file__).resolve().parent.parent / 'data'
+            path.mkdir(parents=True, exist_ok=True)
+            save_path = path / 'plot.png'
+        fig.savefig(save_path, dpi=150, bbox_inches='tight', facecolor='white')
+        print(f'Saved {save_path}')
+        return fig
 
     @staticmethod
     def positions_from_task(task, x_entry: int, x_far: int,
@@ -235,7 +362,8 @@ def _adapt_stream(phi: float, tau_phi: float, times: np.ndarray) -> np.ndarray:
         return np.zeros(0)
     ici = np.diff(times)
     ca = np.empty(n)
-    ca[0] = np.finfo(float).eps
+    ca[0] = 1  # np.finfo(float).eps  # first click bilateral in brunton,
+    # but in our task we want it to have full weight
     for i, dt_i in enumerate(ici):
         prod = ca[i] * phi
         log_term = (0.0 if abs(1.0 - prod) < 1e-15
