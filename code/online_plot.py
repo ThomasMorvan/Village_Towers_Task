@@ -1,86 +1,97 @@
 import pandas as pd
-import numpy as np
-from scipy.interpolate import interp1d
 from matplotlib import pyplot as plt
-import seaborn as sns
 from village.custom_classes.online_plot_base import OnlinePlotBase
-
-# Related to test_temp. plot the temperature of the live plot.
+from village.manager import manager
+from task_stages import REQUIRED_COLS
+from plot_utils import (shade_phases, shade_stages, mark_checkpoints,
+                        plot_staircase, plot_rolling_accuracy,
+                        plot_streak, plot_step, shade_rescue)
 
 
 class Online_Plot(OnlinePlotBase):
     def __init__(self) -> None:
         super().__init__()
 
-    def create_figure_and_axes(self, width=10, height=8):
-        print("MAKING NEW FIGURE")
-        self.fig = plt.figure(figsize=(width, height))
-        self.ax1 = self.fig.add_subplot(131)
-        self.ax2 = self.fig.add_subplot(132)
-        self.ax3 = self.fig.add_subplot(133)
+    def create_figure_and_axes(self, width=14, height=8):
+        self.fig, axs = plt.subplots(2, 2, figsize=(width, height))
+        (self.ax1, self.ax2), (self.ax3, self.ax4) = axs
+        self._staircase_twin = self.ax1.twinx()
+        self._step_twin = self.ax4.twinx()
+
+    @staticmethod
+    def _clear_twin(twin_ax=None):
+        """Remove data artists from twin without calling cla(), because cla()
+        on the twin corrupts the shared-axis state and
+        can detach it from the figure."""
+        if twin_ax is None:
+            return
+
+        for artist_list in (twin_ax.lines, twin_ax.collections,
+                            twin_ax.patches, twin_ax.texts,
+                            twin_ax.containers):
+            for a in list(artist_list):
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+        leg = twin_ax.get_legend()
+        if leg is not None:
+            leg.remove()
+        twin_ax.yaxis.tick_right()
+        twin_ax.yaxis.set_label_position("right")
 
     def update_plot(self, df: pd.DataFrame) -> None:
-        try:
-            self.make_timing_plot(df, self.ax1)
-        except Exception:
-            self.make_error_plot(self.ax1)
-        try:
-            self.make_trial_side_and_correct_plot(df, self.ax2)
-        except Exception:
-            self.make_error_plot(self.ax2)
-        try:
-            self.make_temperature_plot(df, self.ax3)
-        except Exception:
-            self.make_error_plot(self.ax3)
+        if df.empty or not REQUIRED_COLS.issubset(df.columns):
+            for ax in (self.ax1, self.ax2, self.ax3, self.ax4):
+                self._error_plot(ax, "Waiting for data...")
+            self.fig.tight_layout()
+            return
+
+        for ax, fn in ((self.ax1, self._plot_staircase),
+                       (self.ax2, self._plot_rolling_accuracy),
+                       (self.ax3, self._plot_streak),
+                       (self.ax4, self._plot_step)):
+            try:
+                fn(df, ax)
+            except Exception as e:
+                self._error_plot(ax, str(e))
 
         self.fig.tight_layout()
 
-    @staticmethod
-    def smooth(x, y):
-        x = np.array(x)
-        y = np.array(y)
-        f = interp1d(x, y, kind="quadratic")
-
-        x_new = np.linspace(min(x), max(x), 100)
-        y_new = f(x_new)
-        return x, y
-
-    def make_temperature_plot(self, df: pd.DataFrame, ax: plt.Axes) -> None:
+    def _plot_staircase(self, df, ax):
         ax.clear()
-        x = df["TRIAL_START"]
-        y = df["temperature"]
-        ax.plot(x, y, ms=7.5, lw=0, marker='o', mew=1.5, mec="g", mfc="w")
-        new_x, new_y = self.smooth(x, y)
-        ax.plot(new_x, new_y, ms=0, lw=1.5, marker='o', color="darkgray")
-        ax.axhline(y=30, lw=1, color="lightgray", ls="--")
-        # df.plot(kind="scatter", x="TRIAL_START", y="temperature", ax=ax)
+        self._clear_twin(self._staircase_twin)
+        if df.empty:
+            self._error_plot(ax, "No data yet")
+            return
+        shade_stages(ax, df)
+        mark_checkpoints(ax, df)
+        shade_phases(ax, df)
+        plot_staircase(df, ax, twin_ax=self._staircase_twin)
 
-    def make_timing_plot(self, df: pd.DataFrame, ax: plt.Axes) -> None:
+    def _plot_rolling_accuracy(self, df, ax):
         ax.clear()
-        df.plot(kind="scatter", x="TRIAL_START", y="trial", ax=ax)
+        shade_stages(ax, df)
+        mark_checkpoints(ax, df)
+        shade_phases(ax, df)
+        shade_rescue(ax, df)
+        s = getattr(manager.training, "settings", None)
+        window = int(getattr(s, "acc_window", 40))
+        rescue_thr = getattr(s, "rescue_threshold", None)
+        plot_rolling_accuracy(df, ax, window=window, rescue_threshold=rescue_thr)
 
-    def make_trial_side_and_correct_plot(self, df: pd.DataFrame, ax: plt.Axes) -> None:
-        _ = self.plot_side_correct_performance(df, ax)
-
-    def make_error_plot(self, ax) -> None:
+    def _plot_streak(self, df, ax):
         ax.clear()
-        ax.text(
-            0.5,
-            0.5,
-            "Could not create plot",
-            horizontalalignment="center",
-            verticalalignment="center",
-            transform=ax.transAxes,
-        )
+        plot_streak(df, ax)
 
-    def plot_side_correct_performance(df: pd.DataFrame, ax: plt.Axes) -> plt.Axes:
+    def _plot_step(self, df, ax):
         ax.clear()
-        # select only the last 100 trials
-        df = df.tail(100)
-        sns.scatterplot(data=df, x="trial", y="trial_type", hue="correct", ax=ax)
-        # make sure the y axis ticks are ascending, inverting the y axis
-        ax.invert_yaxis()
-        # plot the mean of the last 10 trials
-        ax.plot(pd.Series([int(x) for x in df.correct]).rolling(10).mean(), "r")
+        self._clear_twin(self._step_twin)
+        shade_stages(ax, df)
+        shade_phases(ax, df)
+        plot_step(df, ax, twin_ax=self._step_twin)
 
-        return ax
+    def _error_plot(self, ax, msg="Could not create plot"):
+        ax.clear()
+        ax.text(0.5, 0.5, msg, ha="center", va="center",
+                transform=ax.transAxes)

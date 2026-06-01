@@ -32,7 +32,7 @@ class Test_Photogates(Task):
                                      Event.Tup: 'exit'},
             output_actions=[(Output.PWM1, self.settings.light_intensity_high),
                             Output.Valve1,
-                            Output.SoftCode6])
+                            Output.SoftCode7])
 
         self.bpod.add_state(
             state_name='Poke_2',
@@ -41,7 +41,7 @@ class Test_Photogates(Task):
                                      Event.Tup: 'exit'},
             output_actions=[(Output.PWM2, self.settings.light_intensity_high),
                             Output.Valve2,
-                            Output.SoftCode7])
+                            Output.SoftCode8])
 
         self.bpod.add_state(
             state_name='Poke_3',
@@ -50,7 +50,7 @@ class Test_Photogates(Task):
                                      Event.Tup: 'exit'},
             output_actions=[(Output.PWM3, self.settings.light_intensity_high),
                             Output.Valve3,
-                            Output.SoftCode8])
+                            Output.SoftCode9])
 
     def _print(self, idx):
         print(f"Input in {idx}")

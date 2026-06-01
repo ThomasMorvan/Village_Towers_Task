@@ -11,6 +11,7 @@ class TrialSide(Enum):
     LEFT = "L"
     RIGHT = "R"
     NONE = "None"
+    BOTH = "Both"
 
 
 class TrialResult:

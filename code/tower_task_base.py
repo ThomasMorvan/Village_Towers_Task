@@ -60,6 +60,7 @@ class TowersTaskBase(Task):
     SOFTCODE_CAMERA_REFUSE: int = 2
     SOFTCODE_LED_ON_CAPTURE: int = 4
     SOFTCODE_SINGLE_LED_ON: int = 5
+    SOFTCODE_ALL_LEDS_ON: int = 6
 
     CALIBRATION_PATH: str = "led_strip_calibration"
 
@@ -102,7 +103,7 @@ class TowersTaskBase(Task):
         return self._current_frame
 
     @current_led.setter
-    def current_led(self, i: int):
+    def current_led(self, i: int | list[int]):
         self._current_led = i
 
     @current_x.setter

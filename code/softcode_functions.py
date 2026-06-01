@@ -4,10 +4,13 @@ from village.manager import manager
 task = manager.task
 
 
-def _set_led_color(i: int, red: int = 255, green: int = 255, blue: int = 255,
-                   verbose: bool = True):
-    """Set LED color."""
-    task.led_strip.set_led_color(i, red, green, blue)
+def _set_led_color(i: int | list[int], red: int = 255, green: int = 255,
+                   blue: int = 255, verbose: bool = True):
+    """Set LED color for one index or a list of indices,
+    and update the strip only once."""
+    indices = i if isinstance(i, list) else [i]
+    for idx in indices:
+        task.led_strip.set_led_color(idx, red, green, blue)
     task.led_strip.update_strip(sleep_duration=None)
     if verbose:
         print(f"[LED] {i} -> [{red} {green} {blue}]")
@@ -82,12 +85,19 @@ def function5():
 
 
 def function6():
-    print("Port 1 poke")
+    """Turn ON all LEDs in current_led without a timeout (always-on stages)."""
+    if not hasattr(task, "led_strip"):
+        return
+    _set_led_color(task.current_led, *task.COLOR_ON)
 
 
 def function7():
-    print("Port 2 poke")
+    print("Port 1 poke")
 
 
 def function8():
+    print("Port 2 poke")
+
+
+def function9():
     print("Port 3 poke")

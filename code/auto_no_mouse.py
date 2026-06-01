@@ -8,6 +8,7 @@ from village.custom_classes.auto_no_mouse_base import AutoNoMouse_Base, \
 from village.custom_classes.task import Task
 from village.scripts.time_utils import time_utils
 from left_or_right import TrialSide, TrialResult
+from task_stages import STAGES
 from decision_maker import DecisionMaker
 
 
@@ -26,7 +27,7 @@ class AutoNoMouse(AutoNoMouse_Base):
                                0.0, 1.0, "P(correct | reward RIGHT)"),
               AutonomouseParam("use_ddm", bool, True, "Use DDM",
                                0, 1, "1=DDM accumulator, 0=flat accuracy"),
-              AutonomouseParam("ddm_plot", bool, True, "Plot DDM",
+              AutonomouseParam("ddm_plot", bool, False, "Plot DDM",
                                0, 1, "1=Plot DDM acc (debug), 0=Do not plot")]
 
     # Corridor traversal
@@ -49,6 +50,10 @@ class AutoNoMouse(AutoNoMouse_Base):
         -0.055,       # bias
         0.06,         # lapse
     ])
+
+    # Autonomouse with less noise (so better performance) for debug
+    ACC_THETA: np.ndarray = np.array([.1, 8, -0.2, .1, 20 / 7.7,
+                                      0.154, 0.065, 0, 0])
 
     X_RETURN_STEP: int = 5    # pixels per step on the return run
     X_JITTER: int = 5         # max random x deviation per step
@@ -109,7 +114,8 @@ class AutoNoMouse(AutoNoMouse_Base):
         return max(self.X_CLIP_MIN, min(self.X_CLIP_MAX, x))
 
     def run_trial(self) -> None:
-        """One complete simulated trial: poke → traverse → choose → return."""
+        """One complete simulated trial:
+        poke --> traverse --> choose --> return."""
         self.wait(self.WAIT_START)
         if self._stop_event.is_set():
             return
@@ -188,32 +194,43 @@ class AutoNoMouse(AutoNoMouse_Base):
                 setattr(self, param.name, param.clamp(kwargs[param.name]))
         task = self.task
 
-        side = task.left_or_right.draw_next_trial()
-        pR = task.left_or_right.current_PR
-        empR = task.left_or_right.current_empR
-        draw_side = task.left_or_right.current_draw_side.value
-        draw_prob = task.left_or_right.current_draw_prob
-
-        rwd_leds, no_rwd_leds = task.led_picker.draw_towers()
-        if len(rwd_leds) < len(no_rwd_leds):
-            rwd_leds, no_rwd_leds = no_rwd_leds, rwd_leds
-
-        left_leds_idx = rwd_leds if side == TrialSide.LEFT else no_rwd_leds
-        right_leds_idx = rwd_leds if side == TrialSide.RIGHT else no_rwd_leds
-        L_pos, R_pos = DecisionMaker.positions_from_task(
-            task, self.X_ENTRY, self.X_FAR, self.CORRIDOR_LEN_M,
-            led_dict={TrialSide.LEFT: left_leds_idx,
-                      TrialSide.RIGHT: right_leds_idx})
-
-        if self.use_ddm and len(L_pos) + len(R_pos) > 0:
-            steps = max(1, round(self.CORRIDOR_LEN_M / DecisionMaker.DT))
-            self.acc.reset(L_pos, R_pos)
-            self.acc.step(n=steps)
-            chosen = self._choose_ddm()
+        both_sides = STAGES[task._current_stage].both_sides_rewarded
+        if both_sides:
+            side = TrialSide.BOTH
+            pR = task.left_or_right.current_PR
+            empR = task.left_or_right.current_empR
+            draw_side = task.left_or_right.current_draw_side.value
+            draw_prob = task.left_or_right.current_draw_prob
+            rwd_leds = no_rwd_leds = np.array([], dtype=int)
+            left_leds_idx = right_leds_idx = np.array([], dtype=int)
+            chosen = random.choice([TrialSide.LEFT, TrialSide.RIGHT])
         else:
-            chosen = self._choose_accuracy(side)
+            side = task.left_or_right.draw_next_trial()
+            pR = task.left_or_right.current_PR
+            empR = task.left_or_right.current_empR
+            draw_side = task.left_or_right.current_draw_side.value
+            draw_prob = task.left_or_right.current_draw_prob
 
-        correct = (chosen == side)
+            rwd_leds, no_rwd_leds = task.led_picker.draw_towers()
+            if len(rwd_leds) < len(no_rwd_leds):
+                rwd_leds, no_rwd_leds = no_rwd_leds, rwd_leds
+
+            left_leds_idx = rwd_leds if side == TrialSide.LEFT else no_rwd_leds
+            right_leds_idx = rwd_leds if side == TrialSide.RIGHT else no_rwd_leds
+            L_pos, R_pos = DecisionMaker.positions_from_task(
+                task, self.X_ENTRY, self.X_FAR, self.CORRIDOR_LEN_M,
+                led_dict={TrialSide.LEFT: left_leds_idx,
+                          TrialSide.RIGHT: right_leds_idx})
+
+            if self.use_ddm and len(L_pos) + len(R_pos) > 0:
+                steps = max(1, round(self.CORRIDOR_LEN_M / DecisionMaker.DT))
+                self.acc.reset(L_pos, R_pos)
+                self.acc.step(n=steps)
+                chosen = self._choose_ddm()
+            else:
+                chosen = self._choose_accuracy(side)
+
+        correct = True if both_sides else (chosen == side)
         choice_port = "Port1In" if chosen == TrialSide.LEFT else "Port3In"
 
         t0 = time_utils.now_timestamp()
@@ -256,7 +273,7 @@ class AutoNoMouse(AutoNoMouse_Base):
             "L LEDs": left_leds,
             "R LEDs": right_leds,
             "trial_side": side.value,
-            "water": task.settings.reward_amount_ml if correct else 0,
+            "water": task.settings.reward_amount_ml,
             "trial_correct": correct,
             "rwd_density": task.led_picker.mu_reward,
             "no_rwd_density": task.led_picker.mu_no_reward,
@@ -266,16 +283,33 @@ class AutoNoMouse(AutoNoMouse_Base):
             "draw_prob": draw_prob,
             "stage": task._current_stage,
             "phase": task._phase,
+            "mu_r": task._difficulty.mu_r,
+            "mu_nr": (0.0 if task._phase == "warmup"
+                      else task._difficulty.mu_nr),
+            "led_ms": task._difficulty.led_ms,
+            "checkpoint_floor": task._checkpoint_floor,
+            "streak": task._streak,
+            "checkpoint": task._checkpoint,
+            "warmup_trial": len(task._warmup_perf),
             "trial_is_cued": int(task.trial_is_cued),
             "give_free_reward": int(task.give_free_reward),
+            "rescue": int(task._rescue_trials_left > 0),
             "delta_towers": len(rwd_leds) - len(no_rwd_leds),
+            "step_delta": 0.0,
+            "step_boost": 1.0,
         }
 
         task.session_df = pd.concat([task.session_df, pd.DataFrame([row])],
                                     ignore_index=True)
         task.left_or_right.add_trial(TrialResult(side=side, correct=correct))
+        task.current_trial_rwd_side = side
         task.is_trial_correct = correct
         task._after_trial_adaptation()
+        task.current_trial_rwd_side = TrialSide.NONE
+        task.session_df.at[task.session_df.index[-1], "step_delta"] = (
+            task._last_delta)
+        task.session_df.at[task.session_df.index[-1], "step_boost"] = (
+            task._last_boost)
         task._update_hud()
         task.is_trial_correct = None
         task.current_trial += 1

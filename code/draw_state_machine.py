@@ -65,7 +65,7 @@ class DrawStateMachine:
         for m in re.finditer(pattern_1, task_str):
             direct_vals[f"self.{m.group(1)}"].add(m.group(2))
             if self.verbose:
-                print(f"Pattern 1 match: {m.group(0)} → "
+                print(f"Pattern 1 match: {m.group(0)} --> "
                       f"self.{m.group(1)} = '{m.group(2)}'")
 
         # self.X = 123 or self.X = 3.14
@@ -76,7 +76,7 @@ class DrawStateMachine:
                 direct_vals[f"self.{m.group(1)}"].add(
                     int(raw) if '.' not in raw else float(raw))
                 if self.verbose:
-                    print(f"Pattern 2 match: {m.group(0)} → "
+                    print(f"Pattern 2 match: {m.group(0)} --> "
                           f"self.{m.group(1)} = {raw}")
             except ValueError:
                 pass
@@ -89,7 +89,7 @@ class DrawStateMachine:
                 direct_vals[f"self.settings.{m.group(1)}"].add(
                     int(raw) if '.' not in raw else float(raw))
                 if self.verbose:
-                    print(f"Pattern 3 match: {m.group(0)} → "
+                    print(f"Pattern 3 match: {m.group(0)} --> "
                           f"self.settings.{m.group(1)} = {raw}")
             except ValueError:
                 pass
@@ -99,7 +99,7 @@ class DrawStateMachine:
         for m in re.finditer(pattern_4, task_str, re.MULTILINE):
             chains[f"self.{m.group(1)}"].add(m.group(2))
             if self.verbose:
-                print(f"Pattern 4 match: {m.group(0)} → "
+                print(f"Pattern 4 match: {m.group(0)} --> "
                       f"self.{m.group(1)} = {m.group(2)}")
 
         for k, vals in direct_vals.items():
@@ -222,7 +222,7 @@ class DrawStateMachine:
     @staticmethod
     def _split_depth(text, sep=','):
         """Split text based on sep,
-        e.g. "a=1, b=[2,3], c={'x': 4}" → ["a=1", "b=[2,3]", "c={'x': 4}"]
+        e.g. "a=1, b=[2,3], c={'x': 4}" --> ["a=1", "b=[2,3]", "c={'x': 4}"]
         """
         parts, current, depth = [], [], 0
         for ch in text:
