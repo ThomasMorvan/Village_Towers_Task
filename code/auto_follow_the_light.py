@@ -1,11 +1,11 @@
 import random
 import pandas as pd
-from village.custom_classes.auto_no_mouse_base import (AutoNoMouse_Base,
+from village.custom_classes.auto_no_mouse_base import (AutoNoMouseBase,
                                                        AutonomouseParam)
 from village.scripts.time_utils import time_utils
 
 
-class AutoFollowTheLight(AutoNoMouse_Base):
+class AutoFollowTheLight(AutoNoMouseBase):
     TASK_NAME = "FollowTheLight"  # Task it is designed for
 
     # Custom parameters for this Autonomouse, that will appear in the UI.

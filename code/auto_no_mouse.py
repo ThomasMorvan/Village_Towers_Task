@@ -3,7 +3,7 @@ import random
 import numpy as np
 import pandas as pd
 
-from village.custom_classes.auto_no_mouse_base import AutoNoMouse_Base, \
+from village.custom_classes.auto_no_mouse_base import AutoNoMouseBase, \
                                                       AutonomouseParam
 from village.custom_classes.task import Task
 from village.scripts.time_utils import time_utils
@@ -12,7 +12,7 @@ from task_stages import STAGES
 from decision_maker import DecisionMaker
 
 
-class AutoNoMouse(AutoNoMouse_Base):
+class AutoNoMouse(AutoNoMouseBase):
     """Drives TowersTask automatically as a virtual animal.
 
     Args:
