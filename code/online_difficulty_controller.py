@@ -1,0 +1,321 @@
+from collections import deque
+from dataclasses import dataclass
+import numpy as np
+
+from task_stages import STAGES, MAX_STAGE, Difficulty
+
+
+@dataclass
+class AdaptationEvent:
+    """Small event returned by after_trial() to tell Task what to do
+    (advance stage, start warmup, trigger rescue, etc.)."""
+    warmup_passed: bool = False
+    stage_advanced_to: int | None = None
+    rescue_triggered: bool = False
+    rescue_ended: bool = False
+
+
+class Warmup:
+    """Warmup phase tracker at start of each session
+    (easy trials to warm up)."""
+    def __init__(self, min_trials: int, acc_threshold: float,
+                 bias_threshold: float, enabled: bool = True) -> None:
+        self.min_trials = min_trials
+        self.acc_threshold = acc_threshold
+        self.bias_threshold = bias_threshold
+        self.enabled = enabled
+        self._perf: deque = deque()
+
+    def reset(self, maxlen: int) -> None:
+        self._perf = deque(maxlen=maxlen)
+
+    def record(self, side, correct: bool) -> None:
+        self._perf.append((side, correct))
+
+    @property
+    def n(self) -> int:
+        return len(self._perf)
+
+    @property
+    def acc(self) -> float:
+        n = len(self._perf)
+        return sum(c for _, c in self._perf) / n if n else 0.0
+
+    @property
+    def bias(self) -> float:
+        from left_or_right import TrialSide
+        left_c = [c for s, c in self._perf if s == TrialSide.LEFT]
+        right_c = [c for s, c in self._perf if s == TrialSide.RIGHT]
+        return (abs(sum(left_c) / len(left_c) - sum(right_c) / len(right_c))
+                if left_c and right_c else 1.0)
+
+    def passed(self) -> bool:
+        if not self.enabled:
+            return True
+        return (self.n >= self.min_trials
+                and self.acc >= self.acc_threshold
+                and self.bias <= self.bias_threshold)
+
+
+class OnsetBoost:
+    """Exponential onset multiplier for staircase steps at main-phase start.
+    First trials steps are boosted to speed up convergence
+    then decays back to normal over time.
+
+    next() returns M·exp(-t/tau)+1 for the first n_trials calls, then 1.0.
+    enabled=False --> next() always returns 1.0 (no boost).
+    """
+
+    def __init__(self, M: float, tau: float, n_trials: int,
+                 enabled: bool = True) -> None:
+        self.M = M
+        self.tau = tau
+        self.n_trials = n_trials
+        self.enabled = enabled
+        self._t: int = 0
+
+    def reset(self) -> None:
+        self._t = 0
+
+    def next(self) -> float:
+        if not self.enabled:
+            return 1.0
+        self._t += 1
+        if self._t <= self.n_trials:
+            return self.M * np.exp(-self._t / self.tau) + 1.0
+        return 1.0
+
+
+class OnlineDifficultyController:
+    """Within-session trial-by-trial difficulty controller.
+
+    Owns all staircase state and intra-session checkpoint logic.
+    Task reads public attributes (stage, difficulty, phase, …) and
+    receives an AdaptationEvent from after_trial() describing what happened,
+    so it can update device objects (LedPicker, HUD)."""
+
+    def __init__(self) -> None:
+        self.stage: int = 0
+        self.checkpoint: int = 0
+        self.checkpoint_floor: float = 0.0
+        self.difficulty: Difficulty = Difficulty()
+        self.phase: str = "main"
+        self.last_delta: float = 0.0
+        self.last_boost: float = 1.0
+        self._streak: int = 0
+        self._perf_window: deque = deque()
+        self._rescue_trials_left: int = 0
+
+        self._warmup: Warmup | None = None
+        self._boost: OnsetBoost | None = None
+
+    @property
+    def config(self):
+        return STAGES[self.stage]
+
+    @property
+    def streak(self) -> int:
+        return self._streak
+
+    @property
+    def rescue_active(self) -> bool:
+        return self._rescue_trials_left > 0
+
+    @property
+    def warmup_n(self) -> int:
+        return self._warmup.n if self._warmup else 0
+
+    @property
+    def warmup_acc(self) -> float:
+        return self._warmup.acc if self._warmup else 0.0
+
+    @property
+    def warmup_bias(self) -> float:
+        return self._warmup.bias if self._warmup else 1.0
+
+    @property
+    def rolling_acc(self) -> float | None:
+        return (sum(self._perf_window) / len(self._perf_window)
+                if self._perf_window else None)
+
+    def start(self, settings) -> None:
+        """Restore from settings; initialise difficulty with resume logic."""
+        self.stage = min(int(getattr(settings, "stage", 0)), MAX_STAGE)
+        self.checkpoint = int(getattr(settings, "checkpoint", 0))
+        self.checkpoint_floor = float(getattr(settings, "checkpoint_floor",
+                                              0.0))
+
+        floor = self.checkpoint_floor
+        resume = bool(getattr(settings, "resume_from_last", True))
+        if self.stage in (2, 4):
+            last = (float(getattr(settings, "last_mu_nr", floor)) if resume
+                    else floor)
+            self.difficulty = Difficulty(mu_nr=max(last, floor))
+        elif self.stage == 3:
+            last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
+                       else 0)
+            self.difficulty = Difficulty(led_ms=last_ms if last_ms else 5000)
+        else:
+            self.difficulty = Difficulty()
+
+        self._streak = 0
+        self._perf_window = deque(maxlen=int(settings.acc_window))
+        self._rescue_trials_left = 0
+        self.last_delta = 0.0
+        self.last_boost = 1.0
+
+        cfg = STAGES[self.stage]
+        self.phase = "warmup" if cfg.has_warmup else "main"
+        self._reset_warmup(settings)
+        self._reset_boost(settings)
+
+    def after_trial(self, correct: bool, side, settings,
+                    bias: float = 0.0) -> AdaptationEvent:
+        """Process one trial outcome; return Event for Task to act on.
+
+        bias: abs(empirical_p_right - 0.5), used for S1 advance check.
+              Caller (Task) computes this from left_or_right.current_empR.
+        """
+        self.last_delta = 0.0
+        self.last_boost = 1.0
+        self._perf_window.append(int(correct))
+
+        if self.phase == "warmup":
+            return self._check_warmup(side, correct)
+
+        cfg = self.config
+
+        if cfg.staircase.variable == "none":
+            if self.stage == 5:
+                return self._check_rescue(settings)
+            if self.stage == 1:
+                return self._check_s1_advance(settings, bias)
+            return AdaptationEvent()
+
+        boost_mult = self._boost.next() if self._boost else 1.0
+        self.last_boost = boost_mult
+        delta, self._streak, _ = cfg.staircase.compute_step(
+            correct, self._streak, boost_mult, settings)
+        self.last_delta = delta
+        self._apply_staircase_delta(delta, correct, settings)
+        return self._check_checkpoint(settings)
+
+    def _reset_warmup(self, settings) -> None:
+        self._warmup = Warmup(min_trials=settings.warmup_min_trials,
+                              acc_threshold=settings.warmup_acc_threshold,
+                              bias_threshold=settings.warmup_bias_threshold,
+                              enabled=self.config.has_warmup)
+        self._warmup.reset(maxlen=settings.warmup_min_trials)
+
+    def _reset_boost(self, settings) -> None:
+        self._boost = OnsetBoost(M=settings.staircase_M,
+                                 tau=settings.staircase_tau,
+                                 n_trials=settings.onset_boost_trials)
+
+    def _pass_checkpoint(self, to_stage: int, settings) -> AdaptationEvent:
+        self.checkpoint = to_stage - 1
+        new_start = STAGES[to_stage].staircase.start
+        self.checkpoint_floor = new_start
+
+        if to_stage == 3:
+            self.difficulty = Difficulty(led_ms=int(new_start))
+        elif to_stage in (2, 4):
+            self.difficulty = Difficulty(mu_nr=new_start)
+        else:
+            self.difficulty = Difficulty()
+
+        self._streak = 0
+        self._perf_window = deque(maxlen=int(settings.acc_window))
+        self._rescue_trials_left = 0
+        self.stage = to_stage
+        self.phase = "main"
+        if settings.onset_boost_on_graduation:
+            self._reset_boost(settings)
+
+        print(f"   * Checkpoint {self.checkpoint} passed!"
+              f" -> Stage {to_stage} (floor={self.checkpoint_floor:.3f})")
+        return AdaptationEvent(stage_advanced_to=to_stage)
+
+    def _check_warmup(self, side, correct) -> AdaptationEvent:
+        self._warmup.record(side, correct)
+        if self._warmup.passed():
+            self.phase = "main"
+            if self._boost:
+                self._boost.reset()
+            print(f"   * Warmup passed! n={self._warmup.n}, "
+                  f"acc={self._warmup.acc:.0%}, bias={self._warmup.bias:.0%}")
+            return AdaptationEvent(warmup_passed=True)
+        return AdaptationEvent()
+
+    def _check_rescue(self, settings) -> AdaptationEvent:
+        if self._rescue_trials_left > 0:
+            self._rescue_trials_left -= 1
+            if self._rescue_trials_left == 0:
+                print("   * Rescue complete, returning to main task")
+                return AdaptationEvent(rescue_ended=True)
+            return AdaptationEvent()
+        if (getattr(settings, "rescue_enabled", False)
+                and len(self._perf_window) >= settings.acc_window
+                and (sum(self._perf_window) / len(self._perf_window))
+                < settings.rescue_threshold):
+            self._rescue_trials_left = int(settings.rescue_block_size)
+            print(f"   * Rescue triggered!"
+                  f" {settings.rescue_block_size} easy trials")
+            return AdaptationEvent(rescue_triggered=True)
+        return AdaptationEvent()
+
+    def _check_s1_advance(self, settings, bias: float) -> AdaptationEvent:
+        if (len(self._perf_window) >= settings.acc_window
+                and self.stage == 1
+                and getattr(settings, "stage", 0) <= MAX_STAGE):
+            rolling_acc = sum(self._perf_window) / len(self._perf_window)
+            if rolling_acc >= self.config.advance_threshold and bias <= 0.10:
+                return self._pass_checkpoint(to_stage=2, settings=settings)
+        return AdaptationEvent()
+
+    def _apply_staircase_delta(self, delta: float, correct: bool,
+                               settings) -> None:
+        cfg = self.config
+        if cfg.staircase.harder_direction == "up":
+            if correct:
+                self.difficulty.mu_nr = min(
+                    self.difficulty.mu_nr + delta, cfg.staircase.target)
+            else:
+                self.difficulty.mu_nr = max(
+                    self.difficulty.mu_nr - delta, self.checkpoint_floor)
+
+        elif cfg.staircase.harder_direction == "down":
+            if correct:
+                self.difficulty.led_ms = max(
+                    self.difficulty.led_ms - int(delta),
+                    int(settings.min_tower_duration))
+            else:
+                self.difficulty.led_ms = min(
+                    self.difficulty.led_ms + int(delta),
+                    int(self.checkpoint_floor))
+
+    def _check_checkpoint(self, settings) -> AdaptationEvent:
+        if getattr(settings, "stage", 0) > MAX_STAGE:
+            return AdaptationEvent()
+        if len(self._perf_window) < settings.acc_window:
+            return AdaptationEvent()
+
+        rolling_acc = sum(self._perf_window) / len(self._perf_window)
+        cfg = self.config
+
+        if (self.stage == 2
+                and rolling_acc >= cfg.advance_threshold
+                and self.difficulty.mu_nr >= cfg.staircase.target):
+            return self._pass_checkpoint(to_stage=3, settings=settings)
+
+        if (self.stage == 3
+                and rolling_acc >= cfg.advance_threshold
+                and self.difficulty.led_ms <= settings.min_tower_duration):
+            return self._pass_checkpoint(to_stage=4, settings=settings)
+
+        if (self.stage == 4
+                and rolling_acc >= cfg.advance_threshold
+                and self.difficulty.mu_nr >= cfg.staircase.target):
+            return self._pass_checkpoint(to_stage=5, settings=settings)
+
+        return AdaptationEvent()

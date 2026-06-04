@@ -168,26 +168,26 @@ def plot_staircase(df, ax, twin_ax=None):
         ax.plot(df_mu_nr["trial"], df_mu_nr["mu_nr"],
                 color=CFG["mu_nr_color"], lw=CFG["mu_nr_lw"],
                 label=r"$\mu_{NR}$")
-        ax.axhline(STAGES[2].staircase_target,
+        ax.axhline(STAGES[2].staircase.target,
                    color=CFG["mu_nr_color"],
                    ls=CFG["target_ls"], lw=CFG["target_lw"],
                    alpha=CFG["target_alpha"],
-                   label=f"S2 target {STAGES[2].staircase_target}")
-        ax.axhline(STAGES[4].staircase_target,
+                   label=f"S2 target {STAGES[2].staircase.target}")
+        ax.axhline(STAGES[4].staircase.target,
                    color=CFG["mu_nr_color"],
                    ls=":", lw=CFG["target_lw"],
                    alpha=CFG["target_alpha"],
-                   label=f"S4 target {STAGES[4].staircase_target}")
+                   label=f"S4 target {STAGES[4].staircase.target}")
 
     df_led = df.dropna(subset=["led_ms"])
     if not df_led.empty:
         ax2.plot(df_led["trial"], df_led["led_ms"],
                  color=CFG["led_color"], lw=CFG["led_lw"], label="led_ms")
-        ax2.axhline(STAGES[3].staircase_target,
+        ax2.axhline(STAGES[3].staircase.target,
                     color=CFG["led_color"],
                     ls=CFG["target_ls"], lw=CFG["target_lw"],
                     alpha=CFG["target_alpha"],
-                    label=f"led_ms target {STAGES[3].staircase_target:.0f}")
+                    label=f"led_ms target {STAGES[3].staircase.target:.0f}")
 
     if "checkpoint_floor" in df.columns:
         floor = df["checkpoint_floor"].dropna()
@@ -203,18 +203,6 @@ def plot_staircase(df, ax, twin_ax=None):
                            ls=CFG["floor_ls"], lw=CFG["floor_lw"],
                            alpha=CFG["floor_alpha"],
                            label=f"floor {floor.iloc[-1]:.2f}")
-
-    if "step_boost" in df.columns:
-        boost_df = df[df["step_boost"] > 1.001]
-        if not boost_df.empty:
-            t = boost_df["trial"].values
-            cuts = np.where(np.diff(t) > 2)[0]
-            starts = np.concatenate([[t[0]], t[cuts + 1]])
-            ends = np.concatenate([t[cuts], [t[-1]]])
-            for s, e in zip(starts, ends):
-                ax.axvspan(s - 0.5, e + 0.5,
-                           alpha=0.18, color="gold", zorder=0, lw=0)
-            ax.plot([], [], color="gold", alpha=0.7, lw=8, label="onset boost")
 
     if "stage" in df.columns and len(df):
         cur_stage = int(df["stage"].iloc[-1])
@@ -276,18 +264,6 @@ def plot_rolling_accuracy(df, ax, window: int = 100,
                    alpha=CFG["rescue_thr_alpha"],
                    label=f"Rescue ({rescue_threshold:.0%})")
 
-    if "step_boost" in df.columns:
-        boost_df = df[df["step_boost"] > 1.001]
-        if not boost_df.empty:
-            t = boost_df["trial"].values
-            cuts = np.where(np.diff(t) > 2)[0]
-            starts = np.concatenate([[t[0]], t[cuts + 1]])
-            ends = np.concatenate([t[cuts], [t[-1]]])
-            for s, e in zip(starts, ends):
-                ax.axvspan(s - 0.5, e + 0.5,
-                           alpha=0.18, color="gold", zorder=0, lw=0)
-            ax.plot([], [], color="gold", alpha=0.7, lw=8, label="onset boost")
-
     if "stage" in df.columns:
         for _, row in df[df["stage"] != df["stage"].shift()].iterrows():
             ax.text(row["trial"], 1.02, f"S{int(row['stage'])}",
@@ -344,9 +320,33 @@ def plot_streak(df, ax):
     ax.legend(fontsize=CFG["fs"], loc="upper left")
 
 
+def _step_bars(ax, sub_df, boost_series, ok_color, err_color):
+    """Draw the boost as stacked step bars:
+        base (correct/incorrect) + gold boost top."""
+    if sub_df.empty:
+        return
+    boost = boost_series.reindex(sub_df.index).fillna(1.0)
+    base = sub_df["step_delta"] / boost
+    extra = sub_df["step_delta"] - base
+    ok = sub_df["trial_correct"].astype(bool)
+    ax.bar(sub_df.loc[ok,  "trial"], base[ok],
+           color=ok_color,  alpha=CFG["streak_alpha"],
+           width=1, label="correct")
+    ax.bar(sub_df.loc[~ok, "trial"], base[~ok],
+           color=err_color, alpha=CFG["streak_alpha"],
+           width=1, label="incorrect")
+    boosted = extra > 1e-9
+    if boosted.any():
+        ax.bar(sub_df.loc[boosted, "trial"], extra[boosted],
+               bottom=base[boosted], color="gold", alpha=0.7, width=1,
+               label="boost")
+
+
 def plot_step(df, ax, twin_ax=None):
-    """Step size per trial. Left axis: density steps (S2/S4, m⁻¹).
-    Right axis: duration steps (S3, ms). Twin axes to avoid scale clash."""
+    """Step size per trial.
+    Left axis: density steps (S2/S4). Right axis: ms steps (S3, ms).
+    Bars split into base step + gold stacked top for boost contribution.
+    Twin axes to avoid scale clash."""
     if "step_delta" not in df.columns:
         ax.text(0.5, 0.5, "No step_delta column", ha="center", va="center",
                 transform=ax.transAxes)
@@ -361,37 +361,18 @@ def plot_step(df, ax, twin_ax=None):
     ax2.yaxis.tick_right()
     ax2.yaxis.set_label_position("right")
 
+    boost = df["step_boost"] if "step_boost" in df.columns else None
     df_dens = df[df["stage"].isin([2, 4])] if "stage" in df.columns else df
-    if not df_dens.empty:
-        ok = df_dens["trial_correct"].astype(bool)
-        ax.bar(df_dens.loc[ok, "trial"], df_dens.loc[ok, "step_delta"],
-               color=CFG["streak_ok"], alpha=CFG["streak_alpha"],
-               width=1, label="Step correct")
-        ax.bar(df_dens.loc[~ok, "trial"], df_dens.loc[~ok, "step_delta"],
-               color=CFG["streak_err"], alpha=CFG["streak_alpha"],
-               width=1, label="Step incorrect")
+    _step_bars(ax, df_dens,
+               boost if boost is not None else df_dens["step_delta"],
+               CFG["streak_ok"], CFG["streak_err"])
 
     df_ms = df[df["stage"] == 3] if "stage" in df.columns else pd.DataFrame()
-    if not df_ms.empty:
-        ok = df_ms["trial_correct"].astype(bool)
-        ax2.bar(df_ms.loc[ok, "trial"], df_ms.loc[ok, "step_delta"],
-                color=CFG["led_color"], alpha=CFG["streak_alpha"],
-                width=1, label="Step correct")
-        ax2.bar(df_ms.loc[~ok, "trial"], df_ms.loc[~ok, "step_delta"],
-                color="darkorange", alpha=CFG["streak_alpha"],
-                width=1, label="Step incorrect")
-
-    if "step_boost" in df.columns:
-        boost_df = df[df["step_boost"] > 1.001]
-        if not boost_df.empty:
-            t = boost_df["trial"].values
-            cuts = np.where(np.diff(t) > 2)[0]
-            starts = np.concatenate([[t[0]], t[cuts + 1]])
-            ends = np.concatenate([t[cuts], [t[-1]]])
-            for s, e in zip(starts, ends):
-                ax.axvspan(s - 0.5, e + 0.5,
-                           alpha=0.18, color="gold", zorder=0, lw=0)
-            ax.plot([], [], color="gold", alpha=0.7, lw=8, label="onset boost")
+    _step_bars(ax2, df_ms,
+               (boost if boost is not None
+                else df_ms["step_delta"] if not df_ms.empty
+                else pd.Series(dtype=float)),
+               CFG["led_color"], "darkorange")
 
     ax.set_ylabel("Step size", color=CFG["mu_nr_color"])
     ax2.set_ylabel("Δ led_ms (ms)", color=CFG["led_color"])
@@ -400,8 +381,13 @@ def plot_step(df, ax, twin_ax=None):
     ax.set_xlabel("Trial")
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2,
-              fontsize=CFG["fs"], loc="upper left")
+    seen, lines, labels = set(), [], []
+    for line, lbl in zip(lines1 + lines2, labels1 + labels2):
+        if lbl not in seen:
+            seen.add(lbl)
+            lines.append(line)
+            labels.append(lbl)
+    ax.legend(lines, labels, fontsize=CFG["fs"], loc="upper left")
     return ax2
 
 

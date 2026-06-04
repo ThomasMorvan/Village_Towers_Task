@@ -126,6 +126,18 @@ class DrawFurthestX(CameraDrawBase):
                             color, 1, cv2.LINE_AA)
                 y += 20
 
+        # bpod state machine current state
+        bpod_state = hud.get("bpod_state")
+        if bpod_state:
+            label = f"[{bpod_state}]"
+            tw, th = _text_size(label, SMALL_TEXT_SIZE)
+            cv2.rectangle(frame, (MIN_X, HUD_HEIGHT),
+                          (MIN_X + tw + 8, HUD_HEIGHT + th + 6),
+                          HUD_COLOR, -1)
+            cv2.putText(frame, label, (MIN_X + 4, HUD_HEIGHT + th + 2),
+                        _FONT, SMALL_TEXT_SIZE, (200, 200, 200), 1,
+                        cv2.LINE_AA)
+
     def _draw_accumulator(self, frame: np.ndarray, anm) -> None:
         """draw proba + distribution of choice from DDM"""
         acc = anm.acc

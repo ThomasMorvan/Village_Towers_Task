@@ -194,7 +194,7 @@ class AutoNoMouse(AutoNoMouseBase):
                 setattr(self, param.name, param.clamp(kwargs[param.name]))
         task = self.task
 
-        both_sides = STAGES[task._current_stage].both_sides_rewarded
+        both_sides = STAGES[task._odc.stage].both_sides_rewarded
         if both_sides:
             side = TrialSide.BOTH
             pR = task.left_or_right.current_PR
@@ -216,7 +216,8 @@ class AutoNoMouse(AutoNoMouseBase):
                 rwd_leds, no_rwd_leds = no_rwd_leds, rwd_leds
 
             left_leds_idx = rwd_leds if side == TrialSide.LEFT else no_rwd_leds
-            right_leds_idx = rwd_leds if side == TrialSide.RIGHT else no_rwd_leds
+            right_leds_idx = (rwd_leds if side == TrialSide.RIGHT
+                              else no_rwd_leds)
             L_pos, R_pos = DecisionMaker.positions_from_task(
                 task, self.X_ENTRY, self.X_FAR, self.CORRIDOR_LEN_M,
                 led_dict={TrialSide.LEFT: left_leds_idx,
@@ -281,19 +282,19 @@ class AutoNoMouse(AutoNoMouseBase):
             "empR": empR,
             "draw_side": draw_side,
             "draw_prob": draw_prob,
-            "stage": task._current_stage,
-            "phase": task._phase,
-            "mu_r": task._difficulty.mu_r,
-            "mu_nr": (0.0 if task._phase == "warmup"
-                      else task._difficulty.mu_nr),
-            "led_ms": task._difficulty.led_ms,
-            "checkpoint_floor": task._checkpoint_floor,
-            "streak": task._streak,
-            "checkpoint": task._checkpoint,
-            "warmup_trial": len(task._warmup_perf),
+            "stage": task._odc.stage,
+            "phase": task._odc.phase,
+            "mu_r": task._odc.difficulty.mu_r,
+            "mu_nr": (0.0 if task._odc.phase == "warmup"
+                      else task._odc.difficulty.mu_nr),
+            "led_ms": task._odc.difficulty.led_ms,
+            "checkpoint_floor": task._odc.checkpoint_floor,
+            "streak": task._odc.streak,
+            "checkpoint": task._odc.checkpoint,
+            "warmup_trial": task._odc.warmup_n,
             "trial_is_cued": int(task.trial_is_cued),
             "give_free_reward": int(task.give_free_reward),
-            "rescue": int(task._rescue_trials_left > 0),
+            "rescue": int(task._odc.rescue_active),
             "delta_towers": len(rwd_leds) - len(no_rwd_leds),
             "step_delta": 0.0,
             "step_boost": 1.0,
@@ -307,9 +308,9 @@ class AutoNoMouse(AutoNoMouseBase):
         task._after_trial_adaptation()
         task.current_trial_rwd_side = TrialSide.NONE
         task.session_df.at[task.session_df.index[-1], "step_delta"] = (
-            task._last_delta)
+            task._odc.last_delta)
         task.session_df.at[task.session_df.index[-1], "step_boost"] = (
-            task._last_boost)
+            task._odc.last_boost)
         task._update_hud()
         task.is_trial_correct = None
         task.current_trial += 1

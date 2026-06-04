@@ -112,33 +112,39 @@ class TrainingProtocol(TrainingProtocolBase):
         #     correct -10 ms (400Δ ms / 40-trial window)
         #     incorrect +30 ms (3x bigger)
         #     max 100 ms (10x bigger?)
+        # Note: I changed the incorrect step size. Instead of fixed 3x bigger,
+        # which is correct when the target accuracy is 75%, it is now computed
+        # based on the target accuracy. So we have:
+        #     delta_down = delta_up * p/(1-p)
+        #   previously: delta_up * 0.75/0.25 = delta_up * 3
         #
         self.settings.staircase_delta_up = 0.0025  # m^-1 per correct
-        self.settings.staircase_delta_down = 0.0075  # m^-1 per incorrect
+        # p* --> delta_down = delta_up * p/(1-p) so 0.0075 for p*=0.75
+        self.settings.staircase_target_acc = 0.75
         self.settings.staircase_r = 1.5  # step scaling factor
         self.settings.staircase_M = 4.0  # main-phase onset multiplier
         self.settings.staircase_tau = 10.0  # main-phase onset tau (trials)
-        self.settings.onset_boost_trials = 30  # main-phase trials with onset multiplier
+        self.settings.onset_boost_trials = 30  # main-phase trials boost
+        self.settings.onset_boost_on_graduation = False  # boost at chkpt
         self.settings.staircase_delta_max = 0.025  # max step size
 
         # Session warmup gate (paper: easy one-sided trials before main task)
         self.settings.warmup_min_trials = 10   # min warmup trials required
-        self.settings.warmup_acc_threshold = 0.85  # min accuracy to pass warmup
-        self.settings.warmup_bias_threshold = 0.10  # max |acc_L - acc_R| to pass
+        self.settings.warmup_acc_threshold = 0.85  # min accuracy for ok warmup
+        self.settings.warmup_bias_threshold = 0.10  # max |acc_L - acc_R|
 
         # Stage 3 staircase parameters (ms scale), same idea, but we go down
         self.settings.staircase_delta_up_ms = 10  # ms per correct
-        self.settings.staircase_delta_down_ms = 30  # ms per incorrect
         self.settings.staircase_delta_max_ms = 100  # ms, max step size
         self.settings.min_tower_duration = 200  # ms, led ms target
 
         # Task geometry
         self.settings.led_start_dead_zone_cm = 10
-        self.settings.acc_window = 40      # rolling accuracy window (trials)
+        self.settings.acc_window = 40  # rolling accuracy window (trials)
         self.settings.rescue_enabled = False
         self.settings.rescue_threshold = 0.55
         self.settings.rescue_block_size = 10
-        self.settings.resume_from_last = True  # start from last session's difficulty
+        self.settings.resume_from_last = True  # resume last session difficulty
 
         # Input/output settings
         self.settings.reward_amount_ml = 0.08
@@ -209,16 +215,16 @@ class TrainingProtocol(TrainingProtocolBase):
                 "resume_from_last",
             ],
             "Staircase": [
-                "staircase_delta_down",
                 "staircase_delta_up",
+                "staircase_delta_up_ms",
+                "staircase_target_acc",
                 "staircase_r",
+                "staircase_delta_max",
+                "staircase_delta_max_ms",
                 "staircase_M",
                 "staircase_tau",
                 "onset_boost_trials",
-                "staircase_delta_max",
+                "onset_boost_on_graduation",
                 "min_tower_duration",
-                "staircase_delta_down_ms",
-                "staircase_delta_up_ms",
-                "staircase_delta_max_ms",
             ],
         }

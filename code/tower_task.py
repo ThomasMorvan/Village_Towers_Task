@@ -8,7 +8,9 @@ from village.manager import manager
 from tower_task_base import TowersTaskBase
 from left_or_right import LeftOrRight, TrialSide, TrialResult
 from LEDpicker import LedPicker
-from task_stages import STAGES, MAX_STAGE, Difficulty
+from task_stages import STAGES
+from online_difficulty_controller import (OnlineDifficultyController,
+                                          AdaptationEvent)
 
 
 class TowersTask(TowersTaskBase):
@@ -16,7 +18,6 @@ class TowersTask(TowersTaskBase):
 
     def __init__(self):
         super().__init__()
-        self.led_on_duration = 0.2  # Led on in (s)  # TODO: add in settings
         self._furthest_x = 641  # FIXME: self.cam_box.width not initialized yet
         self._this_trial_leds = {TrialSide.LEFT: np.array([], dtype=int),
                                  TrialSide.RIGHT: np.array([], dtype=int)}
@@ -36,19 +37,7 @@ class TowersTask(TowersTaskBase):
         self.trial_is_cued = False
         self.give_free_reward = False
 
-        # Difficulty step params
-        self._current_stage: int = 0
-        self._difficulty: Difficulty = Difficulty()
-        self._checkpoint: int = 0
-        self._checkpoint_floor: float = 0.0
-        self._streak: int = 0
-        self._warmup_perf: list = []  # (TrialSide, correct) per warmup trial
-        self._main_trial: int = 0
-        self._perf_window: deque = deque()  # maxlen set in start()
-        self._phase: str = "warmup"
-        self._rescue_trials_left: int = 0
-        self._last_delta: float = 0.0
-        self._last_boost: float = 1.0
+        self._odc = OnlineDifficultyController()
 
     def _to_strip_indices(self, leds: np.ndarray, side: TrialSide
                           ) -> np.ndarray:
@@ -68,31 +57,27 @@ class TowersTask(TowersTaskBase):
 
     def _update_hud(self) -> None:
         """Update cam_box items to draw"""
-        stage = self._current_stage
+        stage = self._odc.stage
         cfg = STAGES[stage]
-        rolling_acc = (sum(self._perf_window) / len(self._perf_window)
-                       if self._perf_window else None)
+        rolling_acc = self._odc.rolling_acc
         acc_ok = (rolling_acc is not None
                   and rolling_acc >= cfg.advance_threshold)
         acc_pct = f"{rolling_acc*100:.0f}" if rolling_acc is not None else "?"
         thr_pct = f"{cfg.advance_threshold*100:.0f}"
 
-        if self._phase == "warmup":
-            n = len(self._warmup_perf)
-            min_t = int(getattr(self.settings, "warmup_min_trials", 10))
-            acc_thr = float(getattr(self.settings, "warmup_acc_threshold", 0.85))
-            bias_thr = float(getattr(self.settings, "warmup_bias_threshold", 0.10))
-            wm_acc = (sum(c for _, c in self._warmup_perf) / n if n else 0.0)
-            left_c = [c for s, c in self._warmup_perf if s == TrialSide.LEFT]
-            right_c = [c for s, c in self._warmup_perf if s == TrialSide.RIGHT]
-            wm_bias = (abs(sum(left_c) / len(left_c) - sum(right_c) / len(right_c))
-                       if left_c and right_c else 1.0)
+        if self._odc.phase == "warmup":
+            min_t = self._odc._warmup.min_trials
+            acc_thr = self._odc._warmup.acc_threshold
+            bias_thr = self._odc._warmup.bias_threshold
             adv_label = [
-                ("W-trials:", f" {n}/{min_t}", n >= min_t),
-                ("W-acc:", f" {wm_acc*100:.0f}/{acc_thr*100:.0f}%",
-                 wm_acc >= acc_thr),
-                ("W-bias:", f" {wm_bias*100:.0f}/{bias_thr*100:.0f}%",
-                 wm_bias <= bias_thr),
+                ("W-trials:", f" {self._odc.warmup_n}/{min_t}",
+                 self._odc.warmup_n >= min_t),
+                ("W-acc:",
+                 f" {self._odc.warmup_acc*100:.0f}/{acc_thr*100:.0f}%",
+                 self._odc.warmup_acc >= acc_thr),
+                ("W-bias:",
+                 f" {self._odc.warmup_bias*100:.0f}/{bias_thr*100:.0f}%",
+                 self._odc.warmup_bias <= bias_thr),
             ]
 
         elif stage == 0:
@@ -109,221 +94,102 @@ class TowersTask(TowersTaskBase):
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             bias_lbl = ("Bias:", f" {bias*100:.0f}/10%", bias*100 <= 10)
             adv_label = [acc_lbl, bias_lbl]
-        elif stage == 2:
+        elif stage in (2, 4):
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
-            mu_nr_lbl = ("mu_nr:", (f" {self._difficulty.mu_nr:.2f}/"
-                                    f"{cfg.staircase_target:.1f}"),
-                         self._difficulty.mu_nr >= cfg.staircase_target)
+            mu_nr_lbl = ("mu_nr:", (f" {self._odc.difficulty.mu_nr:.2f}/"
+                                    f"{cfg.staircase.target:.1f}"),
+                         self._odc.difficulty.mu_nr >= cfg.staircase.target)
             adv_label = [acc_lbl, mu_nr_lbl]
         elif stage == 3:
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
-            led_ms_lbl = ("LED ms:", (f" {self._difficulty.led_ms:.0f}/"
+            led_ms_lbl = ("LED ms:", (f" {self._odc.difficulty.led_ms:.0f}/"
                                       f"{self.settings.min_tower_duration:.0f}"
                                       ),
-                          (self._difficulty.led_ms <=
-                           self.settings.min_tower_duration))
+                          (self._odc.difficulty.led_ms <=
+                          self.settings.min_tower_duration))
             adv_label = [acc_lbl, led_ms_lbl]
-        elif stage == 4:
-            acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
-            mu_nr_lbl = ("mu_nr:", (f" {self._difficulty.mu_nr:.2f}/"
-                                    f"{cfg.staircase_target:.1f}"),
-                         self._difficulty.mu_nr >= cfg.staircase_target)
-            adv_label = [acc_lbl, mu_nr_lbl]
         elif stage == 5:
             adv_label = [("", "  Final stage", True)]
         else:
             adv_label = [("", "  Done", True)]
 
         self.cam_box.items_to_draw["hud"] = {
-            "phase":            self._phase,
+            "phase":            self._odc.phase,
             "stage":            stage,
             "stage_name":       cfg.name,
-            "difficulty":       self._difficulty,
-            "checkpoint":       self._checkpoint,
-            "checkpoint_floor": self._checkpoint_floor,
-            "streak":           self._streak,
+            "difficulty":       self._odc.difficulty,
+            "checkpoint":       self._odc.checkpoint,
+            "checkpoint_floor": self._odc.checkpoint_floor,
+            "streak":           self._odc.streak,
             "rolling_acc":      rolling_acc,
-            "warmup_trial":     (len(self._warmup_perf),
+            "warmup_trial":     (self._odc.warmup_n,
                                  int(getattr(self.settings,
                                              "warmup_min_trials", 10))),
             "adv_label":        adv_label,
         }
 
     def _apply_stage(self, stage: int) -> None:
-        """Change difficulty parameters according to stage config."""
+        """update LedPicker + trial flags for the given stage.
+        Difficulty is already set in _odc before this is called.
+        """
         cfg = STAGES[stage]
-        self._current_stage = stage
         self.trial_is_cued = cfg.trial_is_cued
         self.give_free_reward = cfg.give_free_reward
 
+        diff = self._odc.difficulty
         if stage == 0:
-            self._difficulty = Difficulty()
-        elif stage == 1:
-            self._difficulty = Difficulty(
-                mu_r=cfg.rwd_density, mu_nr=0.0, led_ms=5000)
-            self.led_picker.update_mu(cfg.rwd_density, 0.0)
-        elif stage == 2:
-            mu_nr = max(self._difficulty.mu_nr, self._checkpoint_floor)
-            self._difficulty = Difficulty(mu_r=cfg.rwd_density,
-                                          mu_nr=mu_nr,
-                                          led_ms=5000)
-            self.led_picker.update_mu(cfg.rwd_density, mu_nr)
-        elif stage == 3:
-            led_ms = self._difficulty.led_ms or int(cfg.staircase_start)
-            self._difficulty = Difficulty(mu_r=cfg.rwd_density,
-                                          mu_nr=cfg.no_rwd_density,
-                                          led_ms=led_ms)
-            self.led_picker.update_mu(cfg.rwd_density, cfg.no_rwd_density)
-        elif stage == 4:
-            mu_nr = max(self._difficulty.mu_nr, self._checkpoint_floor)
-            self._difficulty = Difficulty(mu_r=cfg.rwd_density,
-                                          mu_nr=mu_nr,
-                                          led_ms=int(self.settings.min_tower_duration))
-            self.led_picker.update_mu(cfg.rwd_density, mu_nr)
-        elif stage == 5:
-            self._difficulty = Difficulty(
-                mu_r=cfg.rwd_density, mu_nr=cfg.no_rwd_density,
-                led_ms=int(self.settings.min_tower_duration))
-            self.led_picker.update_mu(cfg.rwd_density, cfg.no_rwd_density)
+            pass  # no LEDs in S0
+        else:
+            self.led_picker.update_mu(diff.mu_r, diff.mu_nr)
+
+        self.settings.stage = stage
+        self.settings.checkpoint = self._odc.checkpoint
+        self.settings.checkpoint_floor = self._odc.checkpoint_floor
 
         print(f"   * _apply_stage {stage}: {cfg.name} "
-              f"(mu_nr={self._difficulty.mu_nr:.3f}, "
-              f"led_ms={self._difficulty.led_ms}ms)")
-
-    def _pass_checkpoint(self, to_stage: int) -> None:
-        self._checkpoint = to_stage - 1
-        new_start = STAGES[to_stage].staircase_start
-        self._checkpoint_floor = new_start
-
-        if to_stage == 3:
-            self._difficulty = Difficulty(led_ms=int(new_start))
-        elif to_stage in (2, 4):
-            self._difficulty = Difficulty(mu_nr=new_start)
-        else:
-            self._difficulty = Difficulty()
-        self._perf_window = deque(maxlen=int(self.settings.acc_window))
-        self._rescue_trials_left = 0
-        self._streak = 0
-        self._main_trial = 0
-        self._apply_stage(to_stage)
-        self.settings.checkpoint = self._checkpoint
-        self.settings.checkpoint_floor = self._checkpoint_floor
-        self.settings.stage = to_stage
-        print(f"   * Checkpoint {self._checkpoint} passed!"
-              f" -> Stage {to_stage} (floor={self._checkpoint_floor:.3f})")
+              f"(mu_nr={diff.mu_nr:.3f}, led_ms={diff.led_ms}ms)")
 
     def _after_trial_adaptation(self) -> None:
-        """Update difficulty parameters based on trial outcome,
-        and check for checkpoint advancement."""
+        """Delegate adaptation to OnlineDifficultyController;
+        handle device side-effects."""
         if self.is_trial_correct is None:
             return
         correct = bool(self.is_trial_correct)
-        stage = self._current_stage
-        cfg = STAGES[stage]
+        bias = abs(self.left_or_right.current_empR - 0.5)
 
-        self._perf_window.append(int(correct))
+        event: AdaptationEvent = self._odc.after_trial(
+            correct, self.current_trial_rwd_side, self.settings, bias=bias)
 
-        self._last_delta = 0.0
-        self._last_boost = 1.0
+        if event.warmup_passed:
+            cfg = STAGES[self._odc.stage]
+            self.led_picker.update_mu(cfg.rwd_density,
+                                      self._odc.difficulty.mu_nr)
 
-        # Warmup phase: easy one-sided (mu_nr=0), no staircase update
-        if self._phase == "warmup":
-            self._warmup_perf.append((self.current_trial_rwd_side, correct))
-            n = len(self._warmup_perf)
-            min_t = int(self.settings.warmup_min_trials)
-            if n >= min_t:
-                wm_acc = sum(c for _, c in self._warmup_perf) / n
-                left_c = [c for s, c in self._warmup_perf if s == TrialSide.LEFT]
-                right_c = [c for s, c in self._warmup_perf
-                           if s == TrialSide.RIGHT]
-                wm_bias = (abs(sum(left_c) / len(left_c)
-                               - sum(right_c) / len(right_c))
-                           if left_c and right_c else 1.0)
-                if (wm_acc >= float(self.settings.warmup_acc_threshold)
-                        and wm_bias <= float(self.settings.warmup_bias_threshold)):
-                    self._phase = "main"
-                    self._main_trial = 0
-                    self.led_picker.update_mu(cfg.rwd_density,
-                                             self._difficulty.mu_nr)
-                    print(f"   * Warmup passed! n={n}, "
-                          f"acc={wm_acc:.0%}, bias={wm_bias:.0%}")
-            return
+        if event.stage_advanced_to is not None:
+            self._apply_stage(event.stage_advanced_to)
+            cfg = STAGES[self._odc.stage]
+            if self._odc.phase == "warmup":
+                self.led_picker.update_mu(cfg.rwd_density, 0.0)
+                print(f"   * Session warmup: mu_nr=0 until "
+                      f">={self.settings.warmup_min_trials} trials at "
+                      f">={self.settings.warmup_acc_threshold:.0%} acc")
 
-        # Stages without trial-by-trial staircase (S0, S1, S5 Final)
-        if cfg.staircase_variable == "none":
-            if stage == 5:  # Final stage: rescue block with easy trials
-                if self._rescue_trials_left > 0:
-                    self._rescue_trials_left -= 1
-                    if self._rescue_trials_left == 0:
-                        self.led_picker.update_mu(cfg.rwd_density,
-                                                  self._difficulty.mu_nr)
-                        print("   * Rescue complete, returning to main task")
-                    return
-                if (self.settings.rescue_enabled
-                        and len(self._perf_window) >= self.settings.acc_window
-                        and (sum(self._perf_window) / len(self._perf_window))
-                        < self.settings.rescue_threshold):
-                    self._rescue_trials_left = int(
-                        self.settings.rescue_block_size)
-                    self.led_picker.update_mu(cfg.rwd_density, 0.0)
-                    print(f"   * Rescue triggered! "
-                          f"{self.settings.rescue_block_size} easy trials")
-                return
-            if (len(self._perf_window) >= self.settings.acc_window
-                    and stage == 1
-                    and self.settings.stage <= MAX_STAGE):
-                rolling_acc = sum(self._perf_window) / len(self._perf_window)
-                bias = abs(self.left_or_right.current_empR - 0.5)
-                if rolling_acc >= cfg.advance_threshold and bias <= 0.10:
-                    self._pass_checkpoint(to_stage=2)
-            return
+        if event.rescue_triggered:
+            cfg = STAGES[self._odc.stage]
+            self.led_picker.update_mu(cfg.rwd_density, 0.0)
 
-        # Staircase stages (S2, S3, S4): main phase only (warmup handled above)
-        self._main_trial += 1
-        delta, self._streak, self._last_boost = cfg.compute_step(
-            correct, self._streak, self._main_trial, self.settings)
-        self._last_delta = delta
+        if event.rescue_ended:
+            cfg = STAGES[self._odc.stage]
+            self.led_picker.update_mu(cfg.rwd_density,
+                                      self._odc.difficulty.mu_nr)
 
-        if cfg.staircase_harder_direction == "up":
-            if correct:  # increase difficulty if correct, but not above target
-                self._difficulty.mu_nr = min(
-                    self._difficulty.mu_nr + delta, cfg.staircase_target)
-            else:  # decrease difficulty if incorrect, but not below checkpoint
-                self._difficulty.mu_nr = max(
-                    self._difficulty.mu_nr - delta, self._checkpoint_floor)
-            self.led_picker.update_mu(cfg.rwd_density, self._difficulty.mu_nr)
-
-        elif cfg.staircase_harder_direction == "down":
-            # same for stage 3: but led_ms decreases when harder
-            if correct:
-                self._difficulty.led_ms = max(
-                    self._difficulty.led_ms - int(delta),
-                    int(self.settings.min_tower_duration))
-            else:
-                self._difficulty.led_ms = min(
-                    self._difficulty.led_ms + int(delta),
-                    int(self._checkpoint_floor))
-
-        # Checkpoint assessment
-        if self.settings.stage > MAX_STAGE:  # done
-            return
-
-        if len(self._perf_window) >= self.settings.acc_window:
-            rolling_acc = sum(self._perf_window) / len(self._perf_window)
-
-            if (stage == 2
-                    and rolling_acc >= cfg.advance_threshold
-                    and self._difficulty.mu_nr >= cfg.staircase_target):
-                self._pass_checkpoint(to_stage=3)
-            elif (stage == 3
-                  and rolling_acc >= cfg.advance_threshold
-                  and self._difficulty.led_ms
-                  <= self.settings.min_tower_duration):
-                self._pass_checkpoint(to_stage=4)
-            elif (stage == 4
-                  and rolling_acc >= cfg.advance_threshold
-                  and self._difficulty.mu_nr >= cfg.staircase_target):
-                self._pass_checkpoint(to_stage=5)
+        # Always keep led_picker in sync after staircase update
+        if not any([event.warmup_passed, event.stage_advanced_to,
+                    event.rescue_triggered, event.rescue_ended]):
+            cfg = STAGES[self._odc.stage]
+            if cfg.staircase.variable != "none" and self._odc.phase == "main":
+                self.led_picker.update_mu(cfg.rwd_density,
+                                          self._odc.difficulty.mu_nr)
 
     def set_ui_settings(self):
         settings.set("AREA1_BOX", [55, 220, 585, 258, 65])
@@ -337,52 +203,28 @@ class TowersTask(TowersTaskBase):
         super().start()
         self.load_led_calibration()
 
-        self.left_valve_opening_time = 1  # self.water_calibration.get_valve_time(
+        self.left_valve_opening_time = 1
+        #     self.water_calibration.get_valve_time(
         #     port=1, volume=self.settings.big_reward_amount_ml
         # )
-        self.middle_valve_opening_time = .250  # self.water_calibration.get_valve_time(
+        self.middle_valve_opening_time = .250
+        #     self.water_calibration.get_valve_time(
         #     port=2, volume=self.settings.small_reward_amount_ml
         # )
-        self.right_valve_opening_time = 1  # self.water_calibration.get_valve_time(
+        self.right_valve_opening_time = 1
+        #     self.water_calibration.get_valve_time(
         #     port=3, volume=self.settings.big_reward_amount_ml
         # )
         self.settings.iti_time = 0
         self.settings.response_time = 60
 
-        self._current_stage = min(int(getattr(self.settings, "stage", 0)),
-                                  MAX_STAGE)
-        self._checkpoint = int(getattr(self.settings, "checkpoint", 0))
-        self._checkpoint_floor = float(getattr(self.settings,
-                                               "checkpoint_floor", 0.0))
-        floor = self._checkpoint_floor
-        resume = bool(getattr(self.settings, "resume_from_last", True))
-        if self._current_stage in (2, 4):
-            if resume:
-                last = float(getattr(self.settings, "last_mu_nr", floor))
-                self._difficulty = Difficulty(mu_nr=max(last, floor))
-            else:
-                self._difficulty = Difficulty(mu_nr=floor)
-        elif self._current_stage == 3:
-            if resume:
-                last_ms = int(getattr(self.settings, "last_led_ms", 5000))
-                self._difficulty = Difficulty(led_ms=last_ms if last_ms else 5000)
-            else:
-                self._difficulty = Difficulty(led_ms=int(floor) if floor else 5000)
-        else:
-            self._difficulty = Difficulty()
-        self._streak = 0
-        self._warmup_perf = deque(maxlen=int(self.settings.warmup_min_trials))
-        self._main_trial = 0
-        self._perf_window = deque(maxlen=int(self.settings.acc_window))
-        self._rescue_trials_left = 0
-        cfg = STAGES[self._current_stage]
-        self._phase = "warmup" if cfg.has_warmup else "main"
+        self._odc.start(self.settings)
         self.led_picker = LedPicker(
             rwd_density=0.0, no_rwd_density=0.0,
             start_dead_zone_cm=self.settings.led_start_dead_zone_cm)
-        self._apply_stage(self._current_stage)
-        if self._phase == "warmup":
-            # Override led_picker to easy one-sided (mu_nr=0) until gate met
+        self._apply_stage(self._odc.stage)
+        if self._odc.phase == "warmup":
+            cfg = STAGES[self._odc.stage]
             self.led_picker.update_mu(cfg.rwd_density, 0.0)
             print(f"   * Session warmup: mu_nr=0 until "
                   f">={int(self.settings.warmup_min_trials)} trials at "
@@ -455,11 +297,19 @@ class TowersTask(TowersTaskBase):
                                       int(self.current_y)))
             self.cam_box.items_to_draw["animal_trace"] = self.animal_trace
 
+        try:
+            sma = self.bpod.sma
+            if "hud" in self.cam_box.items_to_draw:
+                self.cam_box.items_to_draw["hud"]["bpod_state"] = (
+                    sma.state_names[sma.current_state])
+        except (IndexError, AttributeError):
+            pass
+
         self.debug_color_state_leds()
 
-        if STAGES[self._current_stage].timed_leds:
+        if STAGES[self._odc.stage].timed_leds:
             self._softcode_callback_proximity()
-        elif self._current_stage > 0:
+        elif self._odc.stage > 0:
             self._softcode_callback_always_on()
 
     def _softcode_callback_always_on(self):
@@ -532,7 +382,7 @@ class TowersTask(TowersTaskBase):
             self.middle_poke_action = "END TRIAL"
 
         self.cues = []
-        if STAGES[self._current_stage].both_sides_rewarded:
+        if STAGES[self._odc.stage].both_sides_rewarded:
             # Stage 0: motor routine, both ports rewarded
             self.current_trial_rwd_side = TrialSide.BOTH
             left_outputs = [Output.Valve1]
@@ -583,7 +433,7 @@ class TowersTask(TowersTaskBase):
                             *self.cues],
         )
 
-        timed = STAGES[self._current_stage].timed_leds
+        timed = STAGES[self._odc.stage].timed_leds
         poke_softcodes = ([("SoftCode", self.SOFTCODE_CAMERA_REFUSE)]
                           if timed else
                           [("SoftCode", self.SOFTCODE_CAMERA_REFUSE),
@@ -660,19 +510,20 @@ class TowersTask(TowersTaskBase):
         self.register_value("draw_prob", self.left_or_right.current_draw_prob)
 
         # Difficulty info
-        self.register_value("stage", self._current_stage)
-        self.register_value("phase", self._phase)
-        self.register_value("mu_r", self._difficulty.mu_r)
-        self.register_value("mu_nr", 0.0 if self._phase == "warmup"
-                            else self._difficulty.mu_nr)
-        self.register_value("led_ms", self._difficulty.led_ms)
-        self.register_value("checkpoint_floor", self._checkpoint_floor)
-        self.register_value("streak", self._streak)
-        self.register_value("checkpoint", self._checkpoint)
-        self.register_value("warmup_trial", len(self._warmup_perf))
+        self.register_value("stage", self._odc.stage)
+        self.register_value("phase", self._odc.phase)
+        self.register_value("mu_r", self._odc.difficulty.mu_r)
+        self.register_value("mu_nr",
+                            0.0 if self._odc.phase == "warmup"
+                            else self._odc.difficulty.mu_nr)
+        self.register_value("led_ms", self._odc.difficulty.led_ms)
+        self.register_value("checkpoint_floor", self._odc.checkpoint_floor)
+        self.register_value("streak", self._odc.streak)
+        self.register_value("checkpoint", self._odc.checkpoint)
+        self.register_value("warmup_trial", self._odc.warmup_n)
         self.register_value("trial_is_cued", int(self.trial_is_cued))
         self.register_value("give_free_reward", int(self.give_free_reward))
-        self.register_value("rescue", int(self._rescue_trials_left > 0))
+        self.register_value("rescue", int(self._odc.rescue_active))
         if self.current_trial_rwd_side in (TrialSide.LEFT, TrialSide.RIGHT):
             other_side = (TrialSide.RIGHT
                           if self.current_trial_rwd_side == TrialSide.LEFT
@@ -699,8 +550,8 @@ class TowersTask(TowersTaskBase):
         self.cam_box.items_to_draw["animal_trace"] = self.animal_trace
         if self.is_trial_correct is not None:
             self._after_trial_adaptation()
-        self.register_value("step_delta", self._last_delta)
-        self.register_value("step_boost", self._last_boost)
+        self.register_value("step_delta", self._odc.last_delta)
+        self.register_value("step_boost", self._odc.last_boost)
         self._update_hud()
         self.left_or_right.add_trial(
             TrialResult(side=self.current_trial_rwd_side,
