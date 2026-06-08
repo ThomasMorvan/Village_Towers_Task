@@ -21,4 +21,7 @@ class LEDTrigger(CameraTriggerBase):
             cam (Camera): The camera instance providing the trigger status.
         """
 
-        manager.run_softcode_function(3)
+        try:
+            self.functions[3]()
+        except Exception:
+            print("Error running function" + str(3))
