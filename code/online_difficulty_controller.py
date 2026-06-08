@@ -201,16 +201,19 @@ class OnlineDifficultyController:
         return self._check_checkpoint(settings)
 
     def _reset_warmup(self, settings) -> None:
-        self._warmup = Warmup(min_trials=settings.warmup_min_trials,
-                              acc_threshold=settings.warmup_acc_threshold,
-                              bias_threshold=settings.warmup_bias_threshold,
+        min_trials = int(settings.warmup_min_trials)
+        self._warmup = Warmup(min_trials=min_trials,
+                              acc_threshold=float(
+                                  settings.warmup_acc_threshold),
+                              bias_threshold=float(
+                                  settings.warmup_bias_threshold),
                               enabled=self.config.has_warmup)
-        self._warmup.reset(maxlen=settings.warmup_min_trials)
+        self._warmup.reset(maxlen=min_trials)
 
     def _reset_boost(self, settings) -> None:
-        self._boost = OnsetBoost(M=settings.staircase_M,
-                                 tau=settings.staircase_tau,
-                                 n_trials=settings.onset_boost_trials)
+        self._boost = OnsetBoost(M=float(settings.staircase_M),
+                                 tau=float(settings.staircase_tau),
+                                 n_trials=int(settings.onset_boost_trials))
 
     def _pass_checkpoint(self, to_stage: int, settings) -> AdaptationEvent:
         self.checkpoint = to_stage - 1
