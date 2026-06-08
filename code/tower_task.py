@@ -319,7 +319,7 @@ class TowersTask(TowersTaskBase):
         leds = list(self.available_leds_idx)
         self.current_led = leds[0] if len(leds) == 1 else leds
         try:
-            self.functions[self.SOFTCODE_ALL_LEDS_ON]()
+            self.execute_function(self.SOFTCODE_ALL_LEDS_ON)
         except Exception:
             print("Error running function" + str(self.SOFTCODE_ALL_LEDS_ON))
 
@@ -358,7 +358,7 @@ class TowersTask(TowersTaskBase):
             self.current_led = (triggered[0] if len(triggered) == 1
                                 else triggered)
             try:
-                self.functions[self.SOFTCODE_SINGLE_LED_ON]()
+                self.execute_function(self.SOFTCODE_SINGLE_LED_ON)
             except Exception:
                 print("Error running function" + str(
                     self.SOFTCODE_SINGLE_LED_ON))

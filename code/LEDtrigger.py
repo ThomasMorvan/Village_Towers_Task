@@ -22,6 +22,6 @@ class LEDTrigger(CameraTriggerBase):
         """
 
         try:
-            self.functions[3]()
+            self.task.execute_function(3)
         except Exception:
             print("Error running function" + str(3))
