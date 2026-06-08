@@ -20,6 +20,7 @@ def _text_size(text: str, scale: float,
 
 class DrawFurthestX(CameraDrawBase):
     def __init__(self) -> None:
+        super().__init__()
         self.name = "Draw Furthest X"
         self.furthest_x = -1
         self.next_trigger = 0
@@ -205,6 +206,7 @@ class DrawFurthestX(CameraDrawBase):
                     _FONT, 0.42, (40, col2, col1), 1, cv2.LINE_AA)
 
     def draw(self, cam: Camera) -> None:
+        super().draw(cam)
         self.furthest_x = cam.items_to_draw.get("furthest_x", -1)
         self.next_trigger = cam.items_to_draw.get("next_trigger", -1)
         self.led_pos = cam.items_to_draw.get("led_pos", -1)
