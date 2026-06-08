@@ -7,7 +7,7 @@ from threading import Event as thEvent
 import importlib
 import importlib.util
 from village.scripts.log import log
-from village.custom_classes.task import Task
+from village.custom_classes.task_base import TaskBase
 from village.devices.led_strip import get_led_strip
 from village.settings import settings
 from village.manager import manager
@@ -54,7 +54,7 @@ class LEDPosition:
                f"{len(self.samples_x)} samples"
 
 
-class TowersTaskBase(Task):
+class TowersTaskBase(TaskBase):
     SOFTCODE_LED_OFF: int = 0
     SOFTCODE_CAMERA_ACCEPT: int = 1
     SOFTCODE_CAMERA_REFUSE: int = 2

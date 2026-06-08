@@ -5,7 +5,7 @@ import pandas as pd
 
 from village.custom_classes.auto_no_mouse_base import AutoNoMouseBase, \
                                                       AutonomouseParam
-from village.custom_classes.task import Task
+from village.custom_classes.task_base import TaskBase
 from village.scripts.time_utils import time_utils
 from left_or_right import TrialSide, TrialResult
 from task_stages import STAGES
@@ -84,7 +84,7 @@ class AutoNoMouse(AutoNoMouseBase):
     T_REWARD_DUR: float = 0.2    # reward state duration
     T_NO_REWARD_DUR: float = 0.01
 
-    def __init__(self, task: Task = None) -> None:
+    def __init__(self, task: TaskBase = None) -> None:
         super().__init__(task)
         self.acc = DecisionMaker(self.ACC_THETA, [], [])
         self._acc_steps = max(1, round(

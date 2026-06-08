@@ -1,6 +1,6 @@
 
 import numpy as np
-from village.custom_classes.task import BpodEvent as Event
+from village.custom_classes.task_base import BpodEvent as Event
 from village.settings import settings
 from tower_task_base import TowersTaskBase, LEDPosition
 

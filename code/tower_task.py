@@ -1,7 +1,7 @@
 
 from collections import deque
 import numpy as np
-from village.custom_classes.task import (BpodEvent as Event,
+from village.custom_classes.task_base import (BpodEvent as Event,
                                          BpodOutput as Output)
 from village.settings import settings
 from village.manager import manager

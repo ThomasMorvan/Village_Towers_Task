@@ -1,5 +1,5 @@
-from village.custom_classes.task import (BpodEvent as Event,
-                                         BpodOutput as Output, Task)
+from village.custom_classes.task_base import (BpodEvent as Event,
+                                         BpodOutput as Output, TaskBase)
 import random
 
 
@@ -8,7 +8,7 @@ import random
 # https://braincircuitsbehaviorlab.github.io/village/user_guide/create.html
 
 
-class FollowTheLight(Task):
+class FollowTheLight(TaskBase):
     def __init__(self):
         super().__init__()
 

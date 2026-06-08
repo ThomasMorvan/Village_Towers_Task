@@ -1,5 +1,5 @@
-from village.custom_classes.task import (BpodEvent as Event,
-                                         BpodOutput as Output, Task)
+from village.custom_classes.task_base import (BpodEvent as Event,
+                                         BpodOutput as Output, TaskBase)
 
 
 # click on the link below to see the documentation about how to create
@@ -7,7 +7,7 @@ from village.custom_classes.task import (BpodEvent as Event,
 # https://braincircuitsbehaviorlab.github.io/village/user_guide/create.html
 
 
-class Habituation(Task):
+class Habituation(TaskBase):
     """
     This class defines the task.
 

@@ -1,7 +1,7 @@
-from village.custom_classes.task import (BpodEvent as Event,
-                                         BpodOutput as Output, Task)
+from village.custom_classes.task_base import (BpodEvent as Event,
+                                         BpodOutput as Output, TaskBase)
 
-class TaskTest(Task):
+class TaskTest(TaskBase):
     def __init__(self):
         super().__init__()
 

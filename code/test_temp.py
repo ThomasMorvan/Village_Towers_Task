@@ -1,5 +1,5 @@
-from village.custom_classes.task import (BpodEvent as Event,
-                                         BpodOutput as Output, Task)
+from village.custom_classes.task_base import (BpodEvent as Event,
+                                         BpodOutput as Output, TaskBase)
 import smbus
 import time
 
@@ -36,7 +36,7 @@ import time
 # https://braincircuitsbehaviorlab.github.io/village/user_guide/create.html
 
 
-class TestSpeed(Task):
+class TestSpeed(TaskBase):
     """
     This class defines the task.
 
