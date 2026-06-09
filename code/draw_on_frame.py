@@ -3,6 +3,10 @@ from math import radians, cos, sin
 import cv2
 import numpy as np
 from typing import TYPE_CHECKING
+
+from PyQt5.QtCore import QPoint
+from PyQt5.QtGui import QBrush, QColor, QPainter, QPen
+
 from village.custom_classes.camera_draw_base import CameraDrawBase
 from task_stages import PHASE_BGR, Difficulty
 
@@ -22,10 +26,6 @@ class DrawFurthestX(CameraDrawBase):
     def __init__(self) -> None:
         super().__init__()
         self.name = "Draw Furthest X"
-        self.furthest_x = -1
-        self.next_trigger = 0
-        self.led_pos = []
-        self.animal_trace = []
 
     def _draw_hud(self, frame: np.ndarray, hud: dict) -> None:
         MIN_X = 320
@@ -206,61 +206,9 @@ class DrawFurthestX(CameraDrawBase):
                     _FONT, 0.42, (40, col2, col1), 1, cv2.LINE_AA)
 
     def draw(self, cam: Camera) -> None:
+        """cv2 overlays burned into the recorded video"""
         super().draw(cam)
-        self.furthest_x = cam.items_to_draw.get("furthest_x", -1)
-        self.next_trigger = cam.items_to_draw.get("next_trigger", -1)
-        self.led_pos = cam.items_to_draw.get("led_pos", -1)
-
-        line_lims = [0, cam.height]
-        try:
-            area_1 = cam.areas[0]
-            _, T, _, B = area_1[0], area_1[1], area_1[2], area_1[3]
-            line_lims = [T, B]
-        except Exception:
-            pass
-
-        if self.furthest_x != -1:
-            cv2.line(cam.frame,
-                     (self.furthest_x, line_lims[0]),
-                     (self.furthest_x, line_lims[1]), (0, 255, 255), 2)
-
-        if self.next_trigger != -1:
-            cv2.line(cam.frame,
-                     (self.next_trigger, line_lims[0]),
-                     (self.next_trigger, line_lims[1]), (255, 0, 255), 2)
-
-        if isinstance(self.led_pos, list) and self.led_pos:
-            for pos in self.led_pos:
-                cv2.circle(cam.frame, (pos.x_hat, pos.y_hat), 3,
-                           (0, 255, 0), 2)
-
-        maxlen = 25 * 5
         anm = cam.items_to_draw.get("auto_instance")
-
-        if anm is not None:
-            if anm.position is not None:
-                cv2.circle(cam.frame, anm.position,
-                           cam.detection_size, (255, 200, 0), -1)
-            trace = list(anm.trace)
-            n = len(trace)
-            if n > 1:
-                for i in range(1, n):
-                    age = n - 1 - i
-                    intensity = max(0, int(255 * (maxlen - age) / maxlen))
-                    cv2.line(cam.frame, trace[i - 1], trace[i],
-                             (0, intensity, intensity + 80), 2, cv2.LINE_AA)
-        else:
-            self.animal_trace = list(
-                cam.items_to_draw.get("animal_trace", [])
-            )
-            n = len(self.animal_trace)
-            if n > 1:
-                for i in range(1, n):
-                    age = n - 1 - i
-                    intensity = max(0, int(255 * (maxlen - age) / maxlen))
-                    cv2.line(cam.frame, self.animal_trace[i - 1],
-                             self.animal_trace[i],
-                             (0, intensity, intensity), 2, cv2.LINE_AA)
 
         hud = cam.items_to_draw.get("hud")
         if hud:
@@ -268,3 +216,74 @@ class DrawFurthestX(CameraDrawBase):
 
         if anm is not None and hasattr(anm, "acc"):
             self._draw_accumulator(cam.frame, anm)
+
+    def draw_preview(self, cam: Camera, painter: QPainter) -> None:
+        """Live overlay (NOT saved to the video)"""
+        super().draw_preview(cam, painter)
+        device = painter.device()
+        if device is None:
+            return
+        scale_x = device.width() / cam.width
+        scale_y = device.height() / cam.height
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        def sx(x: float) -> int:
+            return int(x * scale_x)
+
+        def sy(y: float) -> int:
+            return int(y * scale_y)
+
+        furthest_x = cam.items_to_draw.get("furthest_x", -1)
+        next_trigger = cam.items_to_draw.get("next_trigger", -1)
+        led_pos = cam.items_to_draw.get("led_pos", -1)
+
+        line_lims = [0, cam.height]
+        try:
+            area_1 = cam.areas[0]
+            line_lims = [area_1[1], area_1[3]]
+        except Exception:
+            pass
+
+        if furthest_x != -1:
+            painter.setPen(QPen(QColor(0, 255, 255), 2))
+            painter.drawLine(sx(furthest_x), sy(line_lims[0]),
+                             sx(furthest_x), sy(line_lims[1]))
+
+        if next_trigger != -1:
+            painter.setPen(QPen(QColor(255, 0, 255), 2))
+            painter.drawLine(sx(next_trigger), sy(line_lims[0]),
+                             sx(next_trigger), sy(line_lims[1]))
+
+        if isinstance(led_pos, list) and led_pos:
+            painter.setPen(QPen(QColor(0, 255, 0), 2))
+            painter.setBrush(QBrush())
+            r = max(1, int(5 * min(scale_x, scale_y)))
+            for pos in led_pos:
+                painter.drawEllipse(QPoint(sx(pos.x_hat), sy(pos.y_hat)), r, r)
+
+        maxlen = 25 * 5
+        anm = cam.items_to_draw.get("auto_instance")
+
+        if anm is not None:
+            if anm.position is not None:
+                color = QColor(255, 200, 0)
+                painter.setPen(QPen(color))
+                painter.setBrush(QBrush(color))
+                r = max(1, int(cam.detection_size * min(scale_x, scale_y)))
+                painter.drawEllipse(
+                    QPoint(sx(anm.position[0]), sy(anm.position[1])), r, r)
+            self._draw_trace(painter, list(anm.trace), maxlen, 80, sx, sy)
+        else:
+            animal_trace = list(cam.items_to_draw.get("animal_trace", []))
+            self._draw_trace(painter, animal_trace, maxlen, 0, sx, sy)
+
+    @staticmethod
+    def _draw_trace(painter, trace, maxlen, red_boost, sx, sy) -> None:
+        n = len(trace)
+        for i in range(1, n):
+            age = n - 1 - i
+            intensity = max(0, int(255 * (maxlen - age) / maxlen))
+            painter.setPen(QPen(QColor(0, intensity,
+                                       min(255, intensity + red_boost)), 2))
+            painter.drawLine(sx(trace[i - 1][0]), sy(trace[i - 1][1]),
+                             sx(trace[i][0]), sy(trace[i][1]))
