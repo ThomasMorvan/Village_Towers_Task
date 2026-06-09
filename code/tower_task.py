@@ -569,3 +569,7 @@ class TowersTask(TowersTaskBase):
 
     def close(self):
         self._close_strip()
+        # flush overlay
+        items = getattr(self.cam_box, "items_to_draw", None)
+        if isinstance(items, dict):
+            items.clear()
