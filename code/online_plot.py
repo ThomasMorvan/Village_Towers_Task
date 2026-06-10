@@ -13,16 +13,33 @@ class Online_Plot(OnlinePlotBase):
         super().__init__()
 
     def create_figure_and_axes(self, width=14, height=8):
-        self.fig, axs = plt.subplots(2, 2, figsize=(width, height))
+        self.fig, axs = plt.subplots(2, 2, figsize=(width, height),
+                                     layout="constrained")
         (self.ax1, self.ax2), (self.ax3, self.ax4) = axs
         self._staircase_twin = self.ax1.twinx()
         self._step_twin = self.ax4.twinx()
 
     @staticmethod
+    def _clear_ax(ax) -> None:
+        """Custom clear for axes that have a twin because cla() also clears
+        the twin, which we don't want."""
+        for coll in (ax.lines, ax.collections, ax.patches,
+                     ax.texts, ax.images, ax.containers):
+            for a in list(coll):
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+        if ax.get_legend() is not None:
+            ax.get_legend().remove()
+        ax.set_xlabel("")
+        ax.set_ylabel("")
+        ax.set_title("")
+        ax.relim()
+
+    @staticmethod
     def _clear_twin(twin_ax=None):
-        """Remove data artists from twin without calling cla(), because cla()
-        on the twin corrupts the shared-axis state and
-        can detach it from the figure."""
+        """Remove data artists from twin without calling cla()."""
         if twin_ax is None:
             return
 
@@ -44,7 +61,6 @@ class Online_Plot(OnlinePlotBase):
         if df.empty or not REQUIRED_COLS.issubset(df.columns):
             for ax in (self.ax1, self.ax2, self.ax3, self.ax4):
                 self._error_plot(ax, "Waiting for data...")
-            self.fig.tight_layout()
             return
 
         for ax, fn in ((self.ax1, self._plot_staircase),
@@ -56,10 +72,8 @@ class Online_Plot(OnlinePlotBase):
             except Exception as e:
                 self._error_plot(ax, str(e))
 
-        self.fig.tight_layout()
-
     def _plot_staircase(self, df, ax):
-        ax.clear()
+        self._clear_ax(ax)
         self._clear_twin(self._staircase_twin)
         if df.empty:
             self._error_plot(ax, "No data yet")
@@ -78,20 +92,21 @@ class Online_Plot(OnlinePlotBase):
         s = getattr(manager.training, "settings", None)
         window = int(getattr(s, "acc_window", 40))
         rescue_thr = getattr(s, "rescue_threshold", None)
-        plot_rolling_accuracy(df, ax, window=window, rescue_threshold=rescue_thr)
+        plot_rolling_accuracy(df, ax, window=window,
+                              rescue_threshold=rescue_thr)
 
     def _plot_streak(self, df, ax):
         ax.clear()
         plot_streak(df, ax)
 
     def _plot_step(self, df, ax):
-        ax.clear()
+        self._clear_ax(ax)
         self._clear_twin(self._step_twin)
         shade_stages(ax, df)
         shade_phases(ax, df)
         plot_step(df, ax, twin_ax=self._step_twin)
 
     def _error_plot(self, ax, msg="Could not create plot"):
-        ax.clear()
+        self._clear_ax(ax)
         ax.text(0.5, 0.5, msg, ha="center", va="center",
                 transform=ax.transAxes)
