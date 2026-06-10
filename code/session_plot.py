@@ -58,8 +58,11 @@ class SessionPlot(SessionPlotBase):
         mark_checkpoints(ax, df)
         shade_phases(ax, df)
         shade_rescue(ax, df)
-        plot_rolling_accuracy(df, ax, window=int(self.settings.acc_window),
-                              rescue_threshold=self.settings.rescue_threshold)
+        s = getattr(self, "settings", None)
+        window = int(getattr(s, "acc_window", 40))
+        rescue_thr = getattr(s, "rescue_threshold", None)
+        plot_rolling_accuracy(df, ax, window=window,
+                              rescue_threshold=rescue_thr)
 
     def _plot_psychometric(self, df, ax):
         ax.clear()
