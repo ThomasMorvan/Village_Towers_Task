@@ -189,6 +189,11 @@ def plot_staircase(df, ax, twin_ax=None):
                        s=CFG["delta_ms"], color=CFG["delta_color"],
                        alpha=CFG["delta_alpha"], edgecolors="none",
                        zorder=1, label=r"$\Delta$towers")
+        df_exp = df.dropna(subset=["mu_r", "mu_nr"])
+        if not df_exp.empty:
+            ax.plot(df_exp["trial"], df_exp["mu_r"] - df_exp["mu_nr"],
+                    color=CFG["delta_color"], lw=CFG["mu_nr_lw"],
+                    zorder=2, label=r"$\Delta\mu$")
 
     df_led = df.dropna(subset=["led_ms"])
     if not df_led.empty:
