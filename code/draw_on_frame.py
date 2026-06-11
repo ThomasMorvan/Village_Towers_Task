@@ -152,7 +152,7 @@ class DrawFurthestX(CameraDrawBase):
         DISTRIBUTION_H = 11  # distrib H above the circle
         WIDGET_WIDTH = radius_out * 2 + 16
         WIDGET_HEIGHT = radius_out + DISTRIBUTION_H + 32
-        WIDGET_X = FRAME_WIDTH - WIDGET_WIDTH - 6
+        WIDGET_X = FRAME_WIDTH - WIDGET_WIDTH - 60
         WIDGET_Y = UPPER_BOX_Y + 3
         cx = WIDGET_X + WIDGET_WIDTH // 2
         cy = WIDGET_Y + DISTRIBUTION_H + radius_out + 4

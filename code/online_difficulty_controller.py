@@ -52,9 +52,10 @@ class Warmup:
     def passed(self) -> bool:
         if not self.enabled:
             return True
+        # Compare at percent resolution so the gate is easier and match HUD
         return (self.n >= self.min_trials
-                and self.acc >= self.acc_threshold
-                and self.bias <= self.bias_threshold)
+                and round(self.acc * 100) >= round(self.acc_threshold * 100)
+                and round(self.bias * 100) <= round(self.bias_threshold * 100))
 
 
 class OnsetBoost:
