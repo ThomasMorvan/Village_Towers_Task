@@ -175,7 +175,7 @@ class TrainingProtocol(TrainingProtocolBase):
                 self.settings.stage = 1
                 self.settings.checkpoint = 1
                 self.settings.checkpoint_floor = 0.0
-                print("   * [TrainingProtocol] Stage 0 -> 1 (Checkpoint A)")
+                print("   * [TrainingProtocol] Stage 0 -> 1")
         else:
             if self.last_task != "TowersTask":
                 return

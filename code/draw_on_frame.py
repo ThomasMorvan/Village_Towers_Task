@@ -81,7 +81,6 @@ class DrawFurthestX(CameraDrawBase):
             cv2.putText(frame, label, (curr_x, diff_y),
                         _FONT, SMALL_TEXT_SIZE,
                         (200, 200, 200), 1, cv2.LINE_AA)
-            # print(_text_size(label, SMALL_TEXT_SIZE))
             diff_y += 10
 
         curr_x += 66 + 7  # max label is checkpoint at 87
@@ -98,7 +97,6 @@ class DrawFurthestX(CameraDrawBase):
             acc_label = f"Acc {perc}%"
             cv2.putText(frame, acc_label, (curr_x, ROW_1_Y),
                         _FONT, TEXT_SIZE, (r, g, 60), 1, cv2.LINE_AA)
-            # print(_text_size(acc_label, TEXT_SIZE))
 
         # streak
         streak = hud.get("streak", 0)
@@ -254,11 +252,18 @@ class DrawFurthestX(CameraDrawBase):
             painter.drawLine(sx(next_trigger), sy(line_lims[0]),
                              sx(next_trigger), sy(line_lims[1]))
 
+        r = max(1, int(5 * min(scale_x, scale_y)))
         if isinstance(led_pos, list) and led_pos:
             painter.setPen(QPen(QColor(0, 255, 0), 2))
             painter.setBrush(QBrush())
-            r = max(1, int(5 * min(scale_x, scale_y)))
             for pos in led_pos:
+                painter.drawEllipse(QPoint(sx(pos.x_hat), sy(pos.y_hat)), r, r)
+
+        led_pos_used = cam.items_to_draw.get("led_pos_used", -1)
+        if isinstance(led_pos_used, list) and led_pos_used:
+            painter.setPen(QPen(QColor(255, 0, 0), 2))
+            painter.setBrush(QBrush())
+            for pos in led_pos_used:
                 painter.drawEllipse(QPoint(sx(pos.x_hat), sy(pos.y_hat)), r, r)
 
         maxlen = 25 * 5

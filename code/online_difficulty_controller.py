@@ -245,7 +245,7 @@ class OnlineDifficultyController:
         if settings.onset_boost_on_graduation:
             self._reset_boost(settings)
 
-        print(f"   * Checkpoint {self.checkpoint} passed!"
+        print(f"   * [ODC] Checkpoint {self.checkpoint} passed!"
               f" -> Stage {to_stage} (floor={self.checkpoint_floor:.3f})")
         return AdaptationEvent(stage_advanced_to=to_stage)
 
@@ -255,7 +255,7 @@ class OnlineDifficultyController:
             self.phase = "main"
             if self._boost:
                 self._boost.reset()
-            print(f"   * Warmup passed! n={self._warmup.n}, "
+            print(f"   * [ODC] Warmup passed! n={self._warmup.n}, "
                   f"acc={self._warmup.acc:.0%}, bias={self._warmup.bias:.0%}")
             return AdaptationEvent(warmup_passed=True)
         return AdaptationEvent()
@@ -264,7 +264,7 @@ class OnlineDifficultyController:
         if self._rescue_trials_left > 0:
             self._rescue_trials_left -= 1
             if self._rescue_trials_left == 0:
-                print("   * Rescue complete, returning to main task")
+                print("   * [ODC] Rescue complete, returning to main task")
                 return AdaptationEvent(rescue_ended=True)
             return AdaptationEvent()
         if (getattr(settings, "rescue_enabled", False)
@@ -272,7 +272,7 @@ class OnlineDifficultyController:
                 and (sum(self._perf_window) / len(self._perf_window))
                 < settings.rescue_threshold):
             self._rescue_trials_left = int(settings.rescue_block_size)
-            print(f"   * Rescue triggered!"
+            print(f"   * [ODC] Rescue triggered!"
                   f" {settings.rescue_block_size} easy trials")
             return AdaptationEvent(rescue_triggered=True)
         return AdaptationEvent()

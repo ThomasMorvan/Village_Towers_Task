@@ -14,7 +14,6 @@ class SubjectPlot(SubjectPlotBase):
 
     def create_plot(self, df: pd.DataFrame, summary_df: pd.DataFrame,
                     width: float = 10, height: float = 12) -> Figure:
-        print(summary_df)
 
         dates_df = df.date.value_counts(sort=False)
         dates_df.index = pd.to_datetime(dates_df.index)
