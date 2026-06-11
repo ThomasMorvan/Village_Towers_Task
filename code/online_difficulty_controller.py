@@ -26,7 +26,7 @@ class Warmup:
         self.enabled = enabled
         self._perf: deque = deque()
 
-    def reset(self, maxlen: int) -> None:
+    def reset(self, maxlen: int | None = None) -> None:
         self._perf = deque(maxlen=maxlen)
 
     def record(self, side, correct: bool) -> None:
@@ -148,13 +148,13 @@ class OnlineDifficultyController:
         floor = self.checkpoint_floor
         resume = bool(getattr(settings, "resume_from_last", True))
         mu_r = STAGES[self.stage].rwd_density
+        min_ms = int(getattr(settings, "min_tower_duration", 200))
         if self.stage in (2, 4):
             last = (float(getattr(settings, "last_mu_nr", floor)) if resume
                     else floor)
-            last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
-                       else 5000)
+            led_ms = 5000 if self.stage == 2 else min_ms
             self.difficulty = Difficulty(mu_r=mu_r, mu_nr=max(last, floor),
-                                         led_ms=last_ms if last_ms else 5000)
+                                         led_ms=led_ms)
         elif self.stage == 3:
             last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
                        else 5000)
@@ -162,11 +162,9 @@ class OnlineDifficultyController:
                                          mu_nr=STAGES[3].no_rwd_density,
                                          led_ms=last_ms if last_ms else 5000)
         elif self.stage == 5:
-            last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
-                       else 5000)
             self.difficulty = Difficulty(mu_r=mu_r,
                                          mu_nr=STAGES[5].no_rwd_density,
-                                         led_ms=last_ms if last_ms else 5000)
+                                         led_ms=min_ms)
         else:
             self.difficulty = Difficulty(mu_r=mu_r)
 
@@ -220,7 +218,7 @@ class OnlineDifficultyController:
                               bias_threshold=float(
                                   settings.warmup_bias_threshold),
                               enabled=self.config.has_warmup)
-        self._warmup.reset(maxlen=min_trials)
+        self._warmup.reset()
 
     def _reset_boost(self, settings) -> None:
         self._boost = OnsetBoost(M=float(settings.staircase_M),
