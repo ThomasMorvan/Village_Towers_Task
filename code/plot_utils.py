@@ -19,6 +19,9 @@ CFG = {
     "mu_nr_lw":          1.5,
     "led_color":         "cyan",
     "led_lw":            1.5,
+    "delta_color":       "seagreen",
+    "delta_alpha":       0.35,
+    "delta_ms":          10,
 
     # targets and floor
     "target_ls":         "--",
@@ -179,6 +182,14 @@ def plot_staircase(df, ax, twin_ax=None):
                    alpha=CFG["target_alpha"],
                    label=f"S4 target {STAGES[4].staircase.target}")
 
+    if "delta_towers" in df.columns:
+        df_dt = df.dropna(subset=["delta_towers"])
+        if not df_dt.empty:
+            ax.scatter(df_dt["trial"], df_dt["delta_towers"],
+                       s=CFG["delta_ms"], color=CFG["delta_color"],
+                       alpha=CFG["delta_alpha"], edgecolors="none",
+                       zorder=1, label=r"$\Delta$towers")
+
     df_led = df.dropna(subset=["led_ms"])
     if not df_led.empty:
         ax2.plot(df_led["trial"], df_led["led_ms"],
@@ -212,9 +223,14 @@ def plot_staircase(df, ax, twin_ax=None):
                 color=cfg.color if cfg else "black",
                 bbox=dict(boxstyle="round,pad=0.2", fc="white", alpha=0.7))
 
-    ax.set_ylabel("Tower density", color=CFG["mu_nr_color"])
+    ax.set_ylabel("Tower count", color=CFG["mu_nr_color"])
     ax.set_xlabel("Trial")
-    ax.set_ylim(0, 9)
+    top, bottom = 9.0, 0.0
+    if "delta_towers" in df.columns and df["delta_towers"].notna().any():
+        dt = df["delta_towers"]
+        top = max(top, float(dt.max()) + 1)
+        bottom = min(bottom, float(dt.min()) - 1)
+    ax.set_ylim(bottom, top)
     ax2.set_ylabel("led_ms (ms)", color=CFG["led_color"])
     ax.tick_params(axis="y", labelcolor=CFG["mu_nr_color"])
     ax2.tick_params(axis="y", labelcolor=CFG["led_color"])
