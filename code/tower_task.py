@@ -159,23 +159,19 @@ class TowersTask(TowersTaskBase):
             correct, self.current_trial_rwd_side, self.settings, bias=bias)
 
         if event.warmup_passed:
-            cfg = STAGES[self._odc.stage]
-            self.led_picker.update_mu(cfg.rwd_density,
+            self.led_picker.update_mu(self._odc.difficulty.mu_r,
                                       self._odc.difficulty.mu_nr)
 
         if event.stage_advanced_to is not None:
             self._apply_stage(event.stage_advanced_to)
-            cfg = STAGES[self._odc.stage]
             if self._odc.phase == "warmup":
-                self.led_picker.update_mu(cfg.rwd_density, 0.0)
+                self.led_picker.update_mu(self._odc.difficulty.mu_r, 0.0)
 
         if event.rescue_triggered:
-            cfg = STAGES[self._odc.stage]
-            self.led_picker.update_mu(cfg.rwd_density, 0.0)
+            self.led_picker.update_mu(self._odc.difficulty.mu_r, 0.0)
 
         if event.rescue_ended:
-            cfg = STAGES[self._odc.stage]
-            self.led_picker.update_mu(cfg.rwd_density,
+            self.led_picker.update_mu(self._odc.difficulty.mu_r,
                                       self._odc.difficulty.mu_nr)
 
         # Always keep led_picker in sync after staircase update
@@ -183,7 +179,7 @@ class TowersTask(TowersTaskBase):
                     event.rescue_triggered, event.rescue_ended]):
             cfg = STAGES[self._odc.stage]
             if cfg.staircase.variable != "none" and self._odc.phase == "main":
-                self.led_picker.update_mu(cfg.rwd_density,
+                self.led_picker.update_mu(self._odc.difficulty.mu_r,
                                           self._odc.difficulty.mu_nr)
 
     def set_ui_settings(self):
@@ -219,8 +215,7 @@ class TowersTask(TowersTaskBase):
             start_dead_zone_cm=self.settings.led_start_dead_zone_cm)
         self._apply_stage(self._odc.stage)
         if self._odc.phase == "warmup":
-            cfg = STAGES[self._odc.stage]
-            self.led_picker.update_mu(cfg.rwd_density, 0.0)
+            self.led_picker.update_mu(self._odc.difficulty.mu_r, 0.0)
         self._update_hud()
 
     def get_LEDs_for_trial(self):
@@ -263,7 +258,8 @@ class TowersTask(TowersTaskBase):
         self._publish_led_pos()
 
     def _publish_led_pos(self):
-        """Publish not-yet-triggered (green) and triggered (red) LED positions."""
+        """Publish not-yet-triggered (green) and
+        triggered (red) LED positions."""
         self.cam_box.items_to_draw["led_pos"] = (
             [self.led_positions[i] for i in self.available_leds_idx])
         self.cam_box.items_to_draw["led_pos_used"] = (
@@ -297,10 +293,18 @@ class TowersTask(TowersTaskBase):
 
         self.debug_color_state_leds()
 
-        if STAGES[self._odc.stage].timed_leds:
+        if self._leds_timed():
             self._softcode_callback_proximity()
         elif self._odc.stage > 0:
             self._softcode_callback_always_on()
+
+    def _leds_timed(self) -> bool:
+        """Whether LEDs are timed this trial. Timed stages still run warmup
+        and rescue ("easy block") trials untimed (always-on), matching the
+        paper's T4/T7-type easy trials."""
+        return (STAGES[self._odc.stage].timed_leds
+                and self._odc.phase != "warmup"
+                and not self._odc.rescue_active)
 
     def _softcode_callback_always_on(self):
         """Light all trial LEDs at once and leave them on (stages 1-2)."""
@@ -431,7 +435,7 @@ class TowersTask(TowersTaskBase):
                             *self.cues],
         )
 
-        timed = STAGES[self._odc.stage].timed_leds
+        timed = self._leds_timed()
         poke_softcodes = ([("SoftCode", self.SOFTCODE_CAMERA_REFUSE)]
                           if timed else
                           [("SoftCode", self.SOFTCODE_CAMERA_REFUSE),

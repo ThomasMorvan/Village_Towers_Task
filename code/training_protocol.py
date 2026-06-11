@@ -22,40 +22,45 @@ class TrainingProtocol(TrainingProtocolBase):
 
     Stage 2: +mu_nr --> learn to deal with tower density distractors
         mu_r=8.4, LEDs always on. Kaernbach staircase increases mu_nr.
-        Start: mu_nr=0.
-        Target: mu_nr>=1.6 (paper T7-> T8 -> T9: 8.4:0 -> 8.3:0.7 -> 8.0:1.6).
+        Start: mu_nr=0. Target: mu_nr>=1.6 (paper eases mu_r 8.4->8.0 across
+        T7->T9, but I hold mu_r=8.4 since the difference is negligible).
         delta_up=0.0025, delta_down=0.0075 (3:1 ratio -> p*=75%).
         Run-length escalation: step * r^(n-1), r=1.5, cap delta_max=0.025.
         Starting here, each session starts with a warmup phase with mu_nr=0
-        (one-sided easy trials) until warmup_min_trials (10) completed
-        at >=warmup_acc_threshold (85%) and bias <=warmup_bias_threshold (10%).
-        Then main phase begins.
+        (one-sided easy trials). Stage 2 uses a longer/looser gate (paper T8):
+        warmup_min_trials=20 at >=80% correct, bias <=10%. Stages 3-5 use the
+        global gate (10 trials at >=85%, bias <=10%). Then main phase begins.
         Onset multiplier M*exp(-t/tau)+1 (M=4.0, tau=10) is applied to the
         first onset_boost_trials (30) main-phase trials, then decays to 1.
         Disable that by setting M=0.
-        Advance: rolling acc >=70% AND mu_nr>=1.6 over acc_window trials.
+        Easy block (rescue): if rolling acc <65%, next 10 trials run mu_nr=0.
+        Advance: rolling acc >=75% AND mu_nr>=1.6 over acc_window trials.
 
     Stage 3: -LED_ms --> learn to deal with timed LED cues
         mu_r=8.0, mu_nr fixed at 1.6 (S2 final value, paper T9). LEDs timed:
         each LED fires for led_ms then turns off. Staircase drives led_ms down.
+        Warmup and easy-block trials stay untimed (always-on; paper T4/T7).
         Start: led_ms=5000.
         Target: led_ms<=200 (min_tower_duration).
         delta_up=10ms, delta_down=30ms (3:1 -> p*=75%), cap delta_max_ms=100.
-        Same run-length escalation and warmup gate as S2.
+        Run-length escalation as S2; warmup gate 10 trials at >=85%.
+        Easy block (rescue): if rolling acc <60%, next 10 trials run mu_nr=0.
         Advance: rolling acc >=70% AND led_ms<=min_tower_duration.
 
     Stage 4: +mu_nr_short --> increase density at short LED (paper T10 -> T11)
         mu_r=7.7, timed LEDs fixed at min_tower_duration (200ms).
-        Staircase drives mu_nr up (same params as S2). Same warmup gate.
+        Staircase drives mu_nr up (same params as S2). Warmup/easy trials
+        untimed; warmup gate 10 trials at >=85%.
         Start: mu_nr=1.6.
         Target: mu_nr>=2.3 (paper T10-> T11: 8:1.6 -> 7.7:2.3).
+        Easy block (rescue): if rolling acc <60%, next 10 trials run mu_nr=0.
         Advance: rolling acc >=70% AND mu_nr>=2.3 over acc_window trials.
 
     Stage 5: Final --> paper T11
         mu_r=7.7, mu_nr=2.3 fixed, led_ms=200ms fixed. LEDs timed.
-        No staircase. Optional rescue: if rescue_enabled and rolling acc drops
-        below rescue_threshold (55%), next rescue_block_size (10) trials use
-        mu_nr=0 before returning to full difficulty.
+        No staircase. Easy block (rescue): if rolling acc drops below 55%, next
+        rescue_block_size (10) trials run mu_nr=0 (untimed) before returning to
+        full difficulty.
         No advancement criterion.
 
     Staircase equilibrium (all stages):
@@ -141,7 +146,7 @@ class TrainingProtocol(TrainingProtocolBase):
         # Task geometry
         self.settings.led_start_dead_zone_cm = 10
         self.settings.acc_window = 40  # rolling accuracy window (trials)
-        self.settings.rescue_enabled = False
+        self.settings.rescue_enabled = True
         self.settings.rescue_threshold = 0.55
         self.settings.rescue_block_size = 10
         self.settings.resume_from_last = True  # resume last session difficulty

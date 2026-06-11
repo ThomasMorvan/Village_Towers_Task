@@ -72,6 +72,9 @@ class StageConfig:
     advance_label: str = ""
     timed_leds: bool = False
     has_warmup: bool = False
+    warmup_min_trials: int | None = None
+    warmup_acc_threshold: float | None = None
+    rescue_threshold: float | None = None
 
     @property
     def staircase(self) -> Staircase:
@@ -99,7 +102,9 @@ STAGES: dict[int, StageConfig] = {
         staircases=(Staircase(variable="minority_density",
                               start=0.0, target=1.6,
                               harder_direction="up"),),
-        color="sandybrown", advance_threshold=0.70, has_warmup=True),
+        color="sandybrown", advance_threshold=0.75, has_warmup=True,
+        warmup_min_trials=20, warmup_acc_threshold=0.80,
+        rescue_threshold=0.65),
     3: StageConfig(
         stage=3, name="-LED_ms", rwd_density=8.0,
         no_rwd_density=1.6, trial_is_cued=False,
@@ -108,7 +113,7 @@ STAGES: dict[int, StageConfig] = {
                               start=5000.0, target=200.0,
                               harder_direction="down"),),
         color="royalblue", advance_threshold=0.70, timed_leds=True,
-        has_warmup=True),
+        has_warmup=True, rescue_threshold=0.60),
     4: StageConfig(
         stage=4, name="+mu_nr_short", rwd_density=7.7,
         no_rwd_density=1.6, trial_is_cued=False,
@@ -117,14 +122,14 @@ STAGES: dict[int, StageConfig] = {
                               start=1.6, target=2.3,
                               harder_direction="up"),),
         color="tomato", advance_threshold=0.70, timed_leds=True,
-        has_warmup=True),
+        has_warmup=True, rescue_threshold=0.60),
     5: StageConfig(
         stage=5, name="Final", rwd_density=7.7,
         no_rwd_density=2.3, trial_is_cued=False,
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(),
         color="gold", advance_threshold=0.0, timed_leds=True,
-        has_warmup=True),
+        has_warmup=True, rescue_threshold=0.55),
 }
 
 MIN_STAGE = 0

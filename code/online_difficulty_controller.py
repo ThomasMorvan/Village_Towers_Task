@@ -196,9 +196,13 @@ class OnlineDifficultyController:
 
         cfg = self.config
 
+        if cfg.rescue_threshold is not None:
+            in_block = self._rescue_trials_left > 0
+            rescue_event = self._check_rescue(settings, cfg.rescue_threshold)
+            if in_block or rescue_event.rescue_triggered:
+                return rescue_event
+
         if cfg.staircase.variable == "none":
-            if self.stage == 5:
-                return self._check_rescue(settings)
             if self.stage == 1:
                 return self._check_s1_advance(settings, bias)
             return AdaptationEvent()
@@ -212,13 +216,18 @@ class OnlineDifficultyController:
         return self._check_checkpoint(settings)
 
     def _reset_warmup(self, settings) -> None:
-        min_trials = int(settings.warmup_min_trials)
+        cfg = self.config
+        min_trials = int(cfg.warmup_min_trials
+                         if cfg.warmup_min_trials is not None
+                         else settings.warmup_min_trials)
+        acc = float(cfg.warmup_acc_threshold
+                    if cfg.warmup_acc_threshold is not None
+                    else settings.warmup_acc_threshold)
         self._warmup = Warmup(min_trials=min_trials,
-                              acc_threshold=float(
-                                  settings.warmup_acc_threshold),
+                              acc_threshold=acc,
                               bias_threshold=float(
                                   settings.warmup_bias_threshold),
-                              enabled=self.config.has_warmup)
+                              enabled=cfg.has_warmup)
         self._warmup.reset()
 
     def _reset_boost(self, settings) -> None:
@@ -266,7 +275,7 @@ class OnlineDifficultyController:
             return AdaptationEvent(warmup_passed=True)
         return AdaptationEvent()
 
-    def _check_rescue(self, settings) -> AdaptationEvent:
+    def _check_rescue(self, settings, threshold: float) -> AdaptationEvent:
         if self._rescue_trials_left > 0:
             self._rescue_trials_left -= 1
             if self._rescue_trials_left == 0:
@@ -276,7 +285,7 @@ class OnlineDifficultyController:
         if (getattr(settings, "rescue_enabled", False)
                 and len(self._perf_window) >= settings.acc_window
                 and (sum(self._perf_window) / len(self._perf_window))
-                < settings.rescue_threshold):
+                < threshold):
             self._rescue_trials_left = int(settings.rescue_block_size)
             print(f"   * [ODC] Rescue triggered!"
                   f" {settings.rescue_block_size} easy trials")
