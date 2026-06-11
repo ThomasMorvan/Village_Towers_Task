@@ -18,6 +18,9 @@ class Online_Plot(OnlinePlotBase):
         (self.ax1, self.ax2), (self.ax3, self.ax4) = axs
         self._staircase_twin = self.ax1.twinx()
         self._step_twin = self.ax4.twinx()
+        dpi = self.fig.get_dpi()
+        self.window_geometry = (100, 100,
+                                int(width * dpi), int(height * dpi))
 
     @staticmethod
     def _clear_ax(ax) -> None:
