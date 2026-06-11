@@ -5,6 +5,7 @@ from village.custom_classes.task_base import (BpodEvent as Event,
                                          BpodOutput as Output)
 from village.settings import settings
 from village.manager import manager
+from village.scripts.log import log
 from tower_task_base import TowersTaskBase
 from left_or_right import LeftOrRight, TrialSide, TrialResult
 from LEDpicker import LedPicker
@@ -146,9 +147,6 @@ class TowersTask(TowersTaskBase):
         self.settings.checkpoint = self._odc.checkpoint
         self.settings.checkpoint_floor = self._odc.checkpoint_floor
 
-        print(f"   * _apply_stage {stage}: {cfg.name} "
-              f"(mu_nr={diff.mu_nr:.3f}, led_ms={diff.led_ms}ms)")
-
     def _after_trial_adaptation(self) -> None:
         """Delegate adaptation to OnlineDifficultyController;
         handle device side-effects."""
@@ -170,9 +168,6 @@ class TowersTask(TowersTaskBase):
             cfg = STAGES[self._odc.stage]
             if self._odc.phase == "warmup":
                 self.led_picker.update_mu(cfg.rwd_density, 0.0)
-                print(f"   * Session warmup: mu_nr=0 until "
-                      f">={self.settings.warmup_min_trials} trials at "
-                      f">={self.settings.warmup_acc_threshold:.0%} acc")
 
         if event.rescue_triggered:
             cfg = STAGES[self._odc.stage]
@@ -226,13 +221,9 @@ class TowersTask(TowersTaskBase):
         if self._odc.phase == "warmup":
             cfg = STAGES[self._odc.stage]
             self.led_picker.update_mu(cfg.rwd_density, 0.0)
-            print(f"   * Session warmup: mu_nr=0 until "
-                  f">={int(self.settings.warmup_min_trials)} trials at "
-                  f">={self.settings.warmup_acc_threshold:.0%} acc, "
-                  f"<={self.settings.warmup_bias_threshold:.0%} bias")
         self._update_hud()
 
-    def get_LEDs_for_trial(self, verbose=True):
+    def get_LEDs_for_trial(self):
         # Draw trial side (left or right).
         self.current_trial_rwd_side = self.left_or_right.draw_next_trial()
 
@@ -263,21 +254,20 @@ class TowersTask(TowersTaskBase):
 
         self.available_leds_idx.update(map_rwd_leds)
         self.available_leds_idx.update(map_no_rwd_leds)
-        if verbose:
-            print(f"   * Trial {self.current_trial_rwd_side.value}")
-            print(f"     - {len(rwd_leds)} RWD LEDs idx:{rwd_leds} "
-                  f"--> LED map: {map_rwd_leds}")
-            print(f"     - {len(no_rwd_leds)} NO RWD LEDs idx:{no_rwd_leds} "
-                  f"--> LED map: {map_no_rwd_leds}")
 
         self._build_led_triggers()
         self._build_led_pos()
         self.debug_color_state_leds()
 
     def _build_led_pos(self):
+        self._publish_led_pos()
+
+    def _publish_led_pos(self):
+        """Publish not-yet-triggered (green) and triggered (red) LED positions."""
         self.cam_box.items_to_draw["led_pos"] = (
-            [self.led_positions[i] for i in self.available_leds_idx]
-            )
+            [self.led_positions[i] for i in self.available_leds_idx])
+        self.cam_box.items_to_draw["led_pos_used"] = (
+            [self.led_positions[i] for i in self.used_leds_idx])
 
     def _build_led_triggers(self):
         """Pre-compute sorted (trigger_x, led_idx) list
@@ -321,11 +311,12 @@ class TowersTask(TowersTaskBase):
         try:
             self.execute_function(self.SOFTCODE_ALL_LEDS_ON)
         except Exception:
-            print("Error running function" + str(self.SOFTCODE_ALL_LEDS_ON))
+            log.error("Error running function "
+                      + str(self.SOFTCODE_ALL_LEDS_ON))
 
         self.used_leds_idx.update(self.available_leds_idx)
         self.available_leds_idx.clear()
-        print(f"[LED] always-on: lit {leds}")
+        self._publish_led_pos()
 
     def _softcode_callback_proximity(self):
         """Trigger LEDs one by one as animal passes them (stages 3-4)."""
@@ -349,7 +340,7 @@ class TowersTask(TowersTaskBase):
         triggered = []
         while (self.led_triggers and
                self._furthest_x <= self.led_triggers[0][0]):
-            trigger_x, led_idx = self.led_triggers.pop(0)
+            _trigger_x, led_idx = self.led_triggers.pop(0)
             triggered.append(led_idx)
             self.available_leds_idx.discard(led_idx)
             self.used_leds_idx.add(led_idx)
@@ -360,10 +351,9 @@ class TowersTask(TowersTaskBase):
             try:
                 self.execute_function(self.SOFTCODE_SINGLE_LED_ON)
             except Exception:
-                print("Error running function" + str(
-                    self.SOFTCODE_SINGLE_LED_ON))
-            print("+", self.available_leds_idx, ">>>", triggered, ">>>  -",
-                  self.used_leds_idx, "::: trigger=", trigger_x)
+                log.error("Error running function "
+                          + str(self.SOFTCODE_SINGLE_LED_ON))
+            self._publish_led_pos()
 
         # Update next_trigger to next LED trigger and display it
         if self.led_triggers:
@@ -542,9 +532,8 @@ class TowersTask(TowersTaskBase):
         else:
             self.register_value("delta_towers", 0)
 
-        print(f"Trial result: side={self.current_trial_rwd_side.value}, "
-              f"correct={self.is_trial_correct}, "
-              f"leds={self._this_trial_leds}")
+        log.info(f"Trial: side={self.current_trial_rwd_side.value}, "
+                 f"correct={self.is_trial_correct}")
 
         self.available_leds_idx = set()
         self.used_leds_idx = set()
@@ -554,6 +543,7 @@ class TowersTask(TowersTaskBase):
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
         self.cam_box.items_to_draw["led_pos"] = []
+        self.cam_box.items_to_draw["led_pos_used"] = []
         self.animal_trace = deque(maxlen=25 * 5)
         self.cam_box.items_to_draw["animal_trace"] = self.animal_trace
         if self.is_trial_correct is not None:
