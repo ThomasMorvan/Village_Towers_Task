@@ -147,24 +147,28 @@ class OnlineDifficultyController:
 
         floor = self.checkpoint_floor
         resume = bool(getattr(settings, "resume_from_last", True))
+        mu_r = STAGES[self.stage].rwd_density
         if self.stage in (2, 4):
             last = (float(getattr(settings, "last_mu_nr", floor)) if resume
                     else floor)
             last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
                        else 5000)
-            self.difficulty = Difficulty(mu_nr=max(last, floor),
+            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=max(last, floor),
                                          led_ms=last_ms if last_ms else 5000)
         elif self.stage == 3:
             last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
                        else 5000)
-            self.difficulty = Difficulty(mu_nr=STAGES[3].no_rwd_density,
+            self.difficulty = Difficulty(mu_r=mu_r,
+                                         mu_nr=STAGES[3].no_rwd_density,
                                          led_ms=last_ms if last_ms else 5000)
         elif self.stage == 5:
             last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
                        else 5000)
-            self.difficulty = Difficulty(led_ms=last_ms if last_ms else 5000)
+            self.difficulty = Difficulty(mu_r=mu_r,
+                                         mu_nr=STAGES[5].no_rwd_density,
+                                         led_ms=last_ms if last_ms else 5000)
         else:
-            self.difficulty = Difficulty()
+            self.difficulty = Difficulty(mu_r=mu_r)
 
         self._streak = 0
         self._perf_window = deque(maxlen=int(settings.acc_window))
@@ -228,14 +232,17 @@ class OnlineDifficultyController:
         new_start = STAGES[to_stage].staircase.start
         self.checkpoint_floor = new_start
         prev = self.difficulty
+        mu_r = STAGES[to_stage].rwd_density
 
         if to_stage == 3:
-            self.difficulty = Difficulty(mu_nr=prev.mu_nr,
+            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=prev.mu_nr,
                                          led_ms=int(new_start))
         elif to_stage in (2, 4):
-            self.difficulty = Difficulty(mu_nr=new_start, led_ms=prev.led_ms)
+            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=new_start,
+                                         led_ms=prev.led_ms)
         else:
-            self.difficulty = Difficulty(mu_nr=prev.mu_nr, led_ms=prev.led_ms)
+            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=prev.mu_nr,
+                                         led_ms=prev.led_ms)
 
         self._streak = 0
         self._perf_window = deque(maxlen=int(settings.acc_window))
