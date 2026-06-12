@@ -245,6 +245,12 @@ class AutoNoMouse(AutoNoMouseBase):
         left_leds = left_leds_idx.tolist()
         right_leds = right_leds_idx.tolist()
 
+        delta_towers = len(rwd_leds) - len(no_rwd_leds)
+        pol = STAGES[task._odc.stage].policy
+        reward_mult = task._reward_policy.reward_mult_for_trial(
+            jackpot=pol.jackpot, effort=pol.effort, delta_towers=delta_towers,
+            single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT))
+
         row: dict = {
             "date": task.date,
             "trial": task.current_trial,
@@ -274,7 +280,9 @@ class AutoNoMouse(AutoNoMouseBase):
             "L LEDs": left_leds,
             "R LEDs": right_leds,
             "trial_side": side.value,
-            "water": task.settings.reward_amount_ml,
+            "water": task.settings.reward_amount_ml * reward_mult,
+            "reward_mult": reward_mult,
+            "jackpot": int(task._reward_policy.last_was_jackpot),
             "trial_correct": correct,
             "rwd_density": task.led_picker.mu_reward,
             "no_rwd_density": task.led_picker.mu_no_reward,
@@ -295,7 +303,7 @@ class AutoNoMouse(AutoNoMouseBase):
             "trial_is_cued": int(task.trial_is_cued),
             "give_free_reward": int(task.give_free_reward),
             "rescue": int(task._odc.rescue_active),
-            "delta_towers": len(rwd_leds) - len(no_rwd_leds),
+            "delta_towers": delta_towers,
             "step_delta": 0.0,
             "step_boost": 1.0,
         }

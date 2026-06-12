@@ -1,6 +1,13 @@
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class StagePolicy:
+    """Optional reward-modulation mechanisms."""
+    jackpot: bool = False  # occasional large reward
+    effort: bool = False   # difficulty-scaled reward
+
+
 @dataclass
 class Difficulty:
     """Active difficulty parameters for one trial."""
@@ -79,6 +86,7 @@ class StageConfig:
     warmup_min_trials: int | None = None
     warmup_acc_threshold: float | None = None
     rescue_threshold: float | None = None
+    policy: StagePolicy = StagePolicy()
 
     @property
     def staircase(self) -> Staircase:

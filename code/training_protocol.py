@@ -153,6 +153,13 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.rescue_block_size = 10
         self.settings.resume_from_last = True  # resume last session difficulty
 
+        # Reward policy (jackpot and effort scaling; see reward_policy.py)
+        self.settings.reward_policy_enabled = False  # master switch
+        self.settings.reward_effort_max_mult = 2.0
+        self.settings.reward_effort_delta_easy = 6.0  # delta with no bonus
+        self.settings.reward_jackpot_mult = 10.0
+        self.settings.reward_jackpot_prob = 0.1  # of correct trials
+
         # Input/output settings
         self.settings.reward_amount_ml = 0.08
         self.settings.light_intensity_high = 255

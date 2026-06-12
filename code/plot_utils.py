@@ -40,6 +40,7 @@ CFG = {
     "thr_lw":            1.0,
     "thr_alpha":         0.7,
     "acc_ylim":          (-0.05, 1.1),
+    "reward_color":      "darkgoldenrod",
 
     # streak
     "streak_ok":         "forestgreen",
@@ -299,6 +300,20 @@ def plot_rolling_accuracy(df, ax, window: int = 100,
                     color=CFG["rescue_color"], ls=CFG["rescue_thr_ls"],
                     lw=CFG["rescue_thr_lw"], alpha=CFG["rescue_thr_alpha"],
                     label="Rescue threshold", zorder=2)
+
+    if "reward_mult" in df.columns and (df["reward_mult"] > 1.0).any():
+        b = df[df["reward_mult"] > 1.0]
+        jp = (b["jackpot"] == 1) if "jackpot" in b.columns else pd.Series(
+            False, index=b.index)
+        eff = b[~jp]
+        if not eff.empty:
+            ax.scatter(eff["trial"], [1.07] * len(eff), marker=".", s=18,
+                       color=CFG["reward_color"], alpha=0.8, zorder=3,
+                       label="Reward boost")
+        if jp.any():
+            ax.scatter(b.loc[jp, "trial"], [1.07] * int(jp.sum()), marker="*",
+                       s=45, color=CFG["reward_color"], edgecolors="k",
+                       linewidths=0.3, zorder=4, label="Jackpot")
 
     if "stage" in df.columns:
         for _, row in df[df["stage"] != df["stage"].shift()].iterrows():

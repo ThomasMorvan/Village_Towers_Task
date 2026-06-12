@@ -9,6 +9,7 @@ from village.scripts.log import log
 from tower_task_base import TowersTaskBase
 from left_or_right import LeftOrRight, TrialSide, TrialResult
 from LEDpicker import LedPicker
+from reward_policy import RewardPolicy
 from task_stages import STAGES
 from online_difficulty_controller import (OnlineDifficultyController,
                                           AdaptationEvent)
@@ -39,6 +40,8 @@ class TowersTask(TowersTaskBase):
         self.give_free_reward = False
 
         self._odc = OnlineDifficultyController()
+        self._reward_policy = RewardPolicy()
+        self._reward_mult = 1.0
 
     def _to_strip_indices(self, leds: np.ndarray, side: TrialSide
                           ) -> np.ndarray:
@@ -210,6 +213,7 @@ class TowersTask(TowersTaskBase):
         self.settings.response_time = 60
 
         self._odc.start(self.settings)
+        self._reward_policy = RewardPolicy.from_settings(self.settings)
         self.led_picker = LedPicker(
             rwd_density=0.0, no_rwd_density=0.0,
             start_dead_zone_cm=self.settings.led_start_dead_zone_cm)
@@ -305,6 +309,16 @@ class TowersTask(TowersTaskBase):
         return (STAGES[self._odc.stage].timed_leds
                 and self._odc.phase != "warmup"
                 and not self._odc.rescue_active)
+
+    def _trial_delta_towers(self) -> int:
+        """Compute delta towers."""
+        side = self.current_trial_rwd_side
+        if side not in (TrialSide.LEFT, TrialSide.RIGHT):
+            return 0
+        other = (TrialSide.RIGHT if side == TrialSide.LEFT
+                 else TrialSide.LEFT)
+        return (len(self._this_trial_leds[side])
+                - len(self._this_trial_leds[other]))
 
     def _softcode_callback_always_on(self):
         """Light all trial LEDs at once and leave them on (stages 1-2)."""
@@ -418,6 +432,15 @@ class TowersTask(TowersTaskBase):
                 raise ValueError(
                     f"Invalid trial side: {self.current_trial_rwd_side}")
 
+        side = self.current_trial_rwd_side
+        pol = STAGES[self._odc.stage].policy
+        self._reward_mult = self._reward_policy.reward_mult_for_trial(
+            jackpot=pol.jackpot, effort=pol.effort,
+            delta_towers=self._trial_delta_towers(),
+            single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT))
+        left_opening_time *= self._reward_mult
+        right_opening_time *= self._reward_mult
+
         self.bpod.add_state(
             state_name="START TRIAL",
             state_timer=0,
@@ -495,7 +518,11 @@ class TowersTask(TowersTaskBase):
                             self._this_trial_leds[TrialSide.RIGHT].tolist())
 
         self.register_value("trial_side", self.current_trial_rwd_side.value)
-        self.register_value("water", self.settings.reward_amount_ml)
+        self.register_value("water",
+                            self.settings.reward_amount_ml * self._reward_mult)
+        self.register_value("reward_mult", self._reward_mult)
+        self.register_value("jackpot",
+                            int(self._reward_policy.last_was_jackpot))
 
         self.is_trial_correct = self.current_trial_is_correct()
         self.register_value("trial_correct", self.is_trial_correct)
@@ -526,15 +553,7 @@ class TowersTask(TowersTaskBase):
         self.register_value("trial_is_cued", int(self.trial_is_cued))
         self.register_value("give_free_reward", int(self.give_free_reward))
         self.register_value("rescue", int(self._odc.rescue_active))
-        if self.current_trial_rwd_side in (TrialSide.LEFT, TrialSide.RIGHT):
-            other_side = (TrialSide.RIGHT
-                          if self.current_trial_rwd_side == TrialSide.LEFT
-                          else TrialSide.LEFT)
-            n_rwd = len(self._this_trial_leds[self.current_trial_rwd_side])
-            n_nrwd = len(self._this_trial_leds[other_side])
-            self.register_value("delta_towers", n_rwd - n_nrwd)
-        else:
-            self.register_value("delta_towers", 0)
+        self.register_value("delta_towers", self._trial_delta_towers())
 
         log.info(f"Trial: side={self.current_trial_rwd_side.value}, "
                  f"correct={self.is_trial_correct}")
