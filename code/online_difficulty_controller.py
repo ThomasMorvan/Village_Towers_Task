@@ -189,11 +189,12 @@ class OnlineDifficultyController:
         """
         self.last_delta = 0.0
         self.last_boost = 1.0
-        self._perf_window.append(int(correct))
 
         if self.phase == "warmup":
             return self._check_warmup(side, correct)
 
+        # Feed main-phase trials to the rolling window.
+        self._perf_window.append(int(correct))
         cfg = self.config
 
         if cfg.rescue_threshold is not None:
