@@ -273,17 +273,32 @@ def plot_rolling_accuracy(df, ax, window: int = 100,
     ax.plot(df["trial"], rolling, color=CFG["acc_color"], lw=CFG["acc_lw"],
             label=f"Rolling accuracy ({window} trials)", zorder=2)
 
-    ax.axhline(STAGES[1].advance_threshold, color=CFG["thr_s1_color"],
-               ls=CFG["target_ls"], lw=CFG["thr_lw"], alpha=CFG["thr_alpha"],
-               label=f"S1 advance ({STAGES[1].advance_threshold})")
-    ax.axhline(STAGES[2].advance_threshold, color=CFG["thr_s23_color"],
-               ls=CFG["target_ls"], lw=CFG["thr_lw"], alpha=CFG["thr_alpha"],
-               label=f"S2-4 advance ({STAGES[2].advance_threshold})")
-    if rescue_threshold is not None:
-        ax.axhline(rescue_threshold, color=CFG["rescue_color"],
-                   ls=CFG["rescue_thr_ls"], lw=CFG["rescue_thr_lw"],
-                   alpha=CFG["rescue_thr_alpha"],
-                   label=f"Rescue ({rescue_threshold:.0%})")
+    if "stage" in df.columns and len(df):
+        stages = df["stage"].astype(int).to_numpy()
+
+        def _per_trial(attr, skip_zero=False):
+            out = []
+            for s in stages:
+                cfg = STAGES.get(s)
+                v = getattr(cfg, attr) if cfg is not None else None
+                if v is None or (skip_zero and v <= 0):
+                    out.append(np.nan)
+                else:
+                    out.append(v)
+            return np.array(out, dtype=float)
+
+        tgt = _per_trial("advance_threshold", skip_zero=True)
+        rsc = _per_trial("rescue_threshold")
+        if not np.isnan(tgt).all():
+            ax.plot(df["trial"], tgt, drawstyle="steps-post",
+                    color=CFG["thr_s23_color"], ls=CFG["target_ls"],
+                    lw=CFG["thr_lw"], alpha=CFG["thr_alpha"],
+                    label="Target accuracy", zorder=2)
+        if not np.isnan(rsc).all():
+            ax.plot(df["trial"], rsc, drawstyle="steps-post",
+                    color=CFG["rescue_color"], ls=CFG["rescue_thr_ls"],
+                    lw=CFG["rescue_thr_lw"], alpha=CFG["rescue_thr_alpha"],
+                    label="Rescue threshold", zorder=2)
 
     if "stage" in df.columns:
         for _, row in df[df["stage"] != df["stage"].shift()].iterrows():
