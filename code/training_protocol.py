@@ -42,15 +42,16 @@ class TrainingProtocol(TrainingProtocolBase):
         Warmup and easy-block trials stay untimed (always-on; paper T4/T7).
         Start: led_ms=5000.
         Target: led_ms<=200 (min_tower_duration).
-        delta_up=10ms, delta_down=30ms (3:1 -> p*=75%), cap delta_max_ms=100.
+        delta_up=10ms, p*=70% so delta_down=23.3ms (2.33:1), cap at 100ms.
         Run-length escalation as S2; warmup gate 10 trials at >=85%.
         Easy block (rescue): if rolling acc <60%, next 10 trials run mu_nr=0.
         Advance: rolling acc >=70% AND led_ms<=min_tower_duration.
 
     Stage 4: +mu_nr_short --> increase density at short LED (paper T10 -> T11)
         mu_r=7.7, timed LEDs fixed at min_tower_duration (200ms).
-        Staircase drives mu_nr up (same params as S2). Warmup/easy trials
-        untimed; warmup gate 10 trials at >=85%.
+        Staircase drives mu_nr up (same step sizes as S2 but p*=70%, so
+        delta_down=delta_up*0.70/0.30). Warmup/easy trials untimed; warmup
+        gate 10 trials at >=85%.
         Start: mu_nr=1.6.
         Target: mu_nr>=2.3 (paper T10-> T11: 8:1.6 -> 7.7:2.3).
         Easy block (rescue): if rolling acc <60%, next 10 trials run mu_nr=0.
@@ -63,8 +64,9 @@ class TrainingProtocol(TrainingProtocolBase):
         full difficulty.
         No advancement criterion.
 
-    Staircase equilibrium (all stages):
-        p* = delta_down/(delta_up+delta_down) = 0.75
+    Staircase equilibrium (per stage):
+        Each staircase converges to its target_acc p* (S2 0.75, S3/S4 0.70),
+        set per-stage in STAGES; delta_down = delta_up * p*/(1-p*).
     """
 
     def __init__(self) -> None:

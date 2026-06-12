@@ -18,12 +18,14 @@ class Staircase:
     target: convergence target (e.g. mu_nr >= 1.6)
     harder_direction: "up" (mu_nr increases) | "down" (led_ms decreases)
     enabled: False then no steps applied like in a normal protocol
+    target_acc: optional per-stage p* for staircase equilibrium. (None=default)
     """
     variable: str = "none"
     start: float = 0.0
     target: float = 0.0
     harder_direction: str = "up"
     enabled: bool = True
+    target_acc: float | None = None
 
     def compute_step(self, correct: bool, streak: int,
                      boost_mult: float, settings) -> tuple[float, int, float]:
@@ -42,7 +44,9 @@ class Staircase:
             new_rl = min(-1, streak - 1) if streak <= 0 else -1
         n = abs(new_rl)
 
-        p = settings.staircase_target_acc  # p* = target accuracy
+        # p* = staircase operating accuracy (per-stage, else global default)
+        p = (self.target_acc if self.target_acc is not None
+             else settings.staircase_target_acc)
         ratio = p / (1.0 - p)  # delta_down = delta_up * ratio
         if self.variable == "tower_duration":
             delta_up = settings.staircase_delta_up_ms
@@ -101,7 +105,7 @@ STAGES: dict[int, StageConfig] = {
         both_sides_rewarded=False,
         staircases=(Staircase(variable="minority_density",
                               start=0.0, target=1.6,
-                              harder_direction="up"),),
+                              harder_direction="up", target_acc=0.75),),
         color="sandybrown", advance_threshold=0.75, has_warmup=True,
         warmup_min_trials=20, warmup_acc_threshold=0.80,
         rescue_threshold=0.65),
@@ -111,7 +115,7 @@ STAGES: dict[int, StageConfig] = {
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(Staircase(variable="tower_duration",
                               start=5000.0, target=200.0,
-                              harder_direction="down"),),
+                              harder_direction="down", target_acc=0.70),),
         color="royalblue", advance_threshold=0.70, timed_leds=True,
         has_warmup=True, rescue_threshold=0.60),
     4: StageConfig(
@@ -120,7 +124,7 @@ STAGES: dict[int, StageConfig] = {
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(Staircase(variable="minority_density",
                               start=1.6, target=2.3,
-                              harder_direction="up"),),
+                              harder_direction="up", target_acc=0.70),),
         color="tomato", advance_threshold=0.70, timed_leds=True,
         has_warmup=True, rescue_threshold=0.60),
     5: StageConfig(
