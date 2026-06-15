@@ -211,10 +211,6 @@ class TrainingProtocol(TrainingProtocolBase):
                 "reward_effort_delta_easy",
             ],
             "Task": [
-                "next_task",
-                "refractory_period",
-                "minimum_duration",
-                "maximum_duration",
                 "led_start_dead_zone_cm",
                 "acc_window",
                 "rescue_enabled",
