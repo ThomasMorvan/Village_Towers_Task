@@ -19,7 +19,7 @@ class Online_Plot(OnlinePlotBase):
         self._staircase_twin = self.ax1.twinx()
         self._step_twin = self.ax4.twinx()
         dpi = self.fig.get_dpi()
-        self.window_geometry = (100, 100,
+        self.window_geometry = (100, 50,
                                 int(width * dpi), int(height * dpi))
 
     @staticmethod
