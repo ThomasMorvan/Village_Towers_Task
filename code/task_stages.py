@@ -106,7 +106,8 @@ STAGES: dict[int, StageConfig] = {
         no_rwd_density=0.0, trial_is_cued=False,
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(),
-        color="lawngreen", advance_threshold=0.80),
+        color="lawngreen", advance_threshold=0.80,
+        policy=StagePolicy(jackpot=True)),
     2: StageConfig(
         stage=2, name="+mu_nr", rwd_density=8.4, no_rwd_density=0.0,
         trial_is_cued=False, give_free_reward=True,
@@ -116,7 +117,8 @@ STAGES: dict[int, StageConfig] = {
                               harder_direction="up", target_acc=0.75),),
         color="sandybrown", advance_threshold=0.75, has_warmup=True,
         warmup_min_trials=20, warmup_acc_threshold=0.80,
-        warmup_bias_threshold=0.10, rescue_threshold=0.65),
+        warmup_bias_threshold=0.10, rescue_threshold=0.65,
+        policy=StagePolicy(jackpot=True)),
     3: StageConfig(
         stage=3, name="-LED_ms", rwd_density=8.0,
         no_rwd_density=1.6, trial_is_cued=False,
@@ -126,7 +128,8 @@ STAGES: dict[int, StageConfig] = {
                               harder_direction="down", target_acc=0.70),),
         color="royalblue", advance_threshold=0.70, timed_leds=True,
         has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
-        warmup_bias_threshold=0.10, rescue_threshold=0.60),
+        warmup_bias_threshold=0.10, rescue_threshold=0.60,
+        policy=StagePolicy(jackpot=True)),
     4: StageConfig(
         stage=4, name="+mu_nr_short", rwd_density=7.7,
         no_rwd_density=1.6, trial_is_cued=False,
@@ -136,7 +139,8 @@ STAGES: dict[int, StageConfig] = {
                               harder_direction="up", target_acc=0.70),),
         color="tomato", advance_threshold=0.70, timed_leds=True,
         has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
-        warmup_bias_threshold=0.10, rescue_threshold=0.60),
+        warmup_bias_threshold=0.10, rescue_threshold=0.60,
+        policy=StagePolicy(jackpot=True)),
     5: StageConfig(
         stage=5, name="Final", rwd_density=7.7,
         no_rwd_density=2.3, trial_is_cued=False,
