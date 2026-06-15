@@ -127,6 +127,11 @@ class OnlineDifficultyController:
         return self._warmup.n if self._warmup else 0
 
     @property
+    def warmup_min(self) -> int:
+        """Per-stage warmup trial target (0 if no warmup)."""
+        return self._warmup.min_trials if self._warmup else 0
+
+    @property
     def warmup_acc(self) -> float:
         return self._warmup.acc if self._warmup else 0.0
 
@@ -177,7 +182,7 @@ class OnlineDifficultyController:
 
         cfg = STAGES[self.stage]
         self.phase = "warmup" if cfg.has_warmup else "main"
-        self._reset_warmup(settings)
+        self._reset_warmup()
         self._reset_boost(settings)
 
     def after_trial(self, correct: bool, side, settings,
@@ -216,18 +221,17 @@ class OnlineDifficultyController:
         self._apply_staircase_delta(delta, correct, settings)
         return self._check_checkpoint(settings)
 
-    def _reset_warmup(self, settings) -> None:
+    def _reset_warmup(self) -> None:
         cfg = self.config
         min_trials = int(cfg.warmup_min_trials
-                         if cfg.warmup_min_trials is not None
-                         else settings.warmup_min_trials)
+                         if cfg.warmup_min_trials is not None else 10)
         acc = float(cfg.warmup_acc_threshold
-                    if cfg.warmup_acc_threshold is not None
-                    else settings.warmup_acc_threshold)
+                    if cfg.warmup_acc_threshold is not None else 0.85)
+        bias = float(cfg.warmup_bias_threshold
+                     if cfg.warmup_bias_threshold is not None else 0.10)
         self._warmup = Warmup(min_trials=min_trials,
                               acc_threshold=acc,
-                              bias_threshold=float(
-                                  settings.warmup_bias_threshold),
+                              bias_threshold=bias,
                               enabled=cfg.has_warmup)
         self._warmup.reset()
 

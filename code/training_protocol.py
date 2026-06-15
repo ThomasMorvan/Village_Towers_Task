@@ -28,8 +28,8 @@ class TrainingProtocol(TrainingProtocolBase):
         Run-length escalation: step * r^(n-1), r=1.5, cap delta_max=0.025.
         Starting here, each session starts with a warmup phase with mu_nr=0
         (one-sided easy trials). Stage 2 uses a longer/looser gate (paper T8):
-        warmup_min_trials=20 at >=80% correct, bias <=10%. Stages 3-5 use the
-        global gate (10 trials at >=85%, bias <=10%). Then main phase begins.
+        warmup_min_trials=20 at >=80% correct, bias <=10%; stages 3-5 use 10
+        trials at >=85%. All per-stage in STAGES. Then main phase begins.
         Onset multiplier M*exp(-t/tau)+1 (M=4.0, tau=10) is applied to the
         first onset_boost_trials (30) main-phase trials, then decays to 1.
         Disable that by setting M=0.
@@ -126,19 +126,14 @@ class TrainingProtocol(TrainingProtocolBase):
         #   previously: delta_up * 0.75/0.25 = delta_up * 3
         #
         self.settings.staircase_delta_up = 0.0025  # m^-1 per correct
-        # p* --> delta_down = delta_up * p/(1-p) so 0.0075 for p*=0.75
-        self.settings.staircase_target_acc = 0.75
+        # p* (target accuracy) is per-stage: Staircase.target_acc in STAGES.
+        # delta_down = delta_up * p*/(1-p*).
         self.settings.staircase_r = 1.5  # step scaling factor
         self.settings.staircase_M = 4.0  # main-phase onset multiplier
         self.settings.staircase_tau = 10.0  # main-phase onset tau (trials)
         self.settings.onset_boost_trials = 30  # main-phase trials boost
         self.settings.onset_boost_on_graduation = False  # boost at chkpt
         self.settings.staircase_delta_max = 0.025  # max step size
-
-        # Session warmup gate (paper: easy one-sided trials before main task)
-        self.settings.warmup_min_trials = 10   # min warmup trials required
-        self.settings.warmup_acc_threshold = 0.85  # min accuracy for ok warmup
-        self.settings.warmup_bias_threshold = 0.10  # max |acc_L - acc_R|
 
         # Stage 3 staircase parameters (ms scale), same idea, but we go down
         self.settings.staircase_delta_up_ms = 10  # ms per correct
@@ -149,7 +144,6 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.led_start_dead_zone_cm = 10
         self.settings.acc_window = 40  # rolling accuracy window (trials)
         self.settings.rescue_enabled = True
-        self.settings.rescue_threshold = 0.55
         self.settings.rescue_block_size = 10
         self.settings.resume_from_last = True  # resume last session difficulty
 
@@ -206,20 +200,25 @@ class TrainingProtocol(TrainingProtocolBase):
 
     def define_gui_tabs(self) -> None:
         self.gui_tabs = {
-            "Reward": [
+            "Reward and reward policy": [
                 "reward_amount_ml",
                 "light_intensity_high",
                 "light_intensity_low",
+                "reward_policy_enabled",
+                "reward_jackpot_mult",
+                "reward_jackpot_prob",
+                "reward_effort_max_mult",
+                "reward_effort_delta_easy",
             ],
             "Task": [
+                "next_task",
+                "refractory_period",
+                "minimum_duration",
+                "maximum_duration",
                 "led_start_dead_zone_cm",
                 "acc_window",
                 "rescue_enabled",
-                "rescue_threshold",
                 "rescue_block_size",
-                "warmup_min_trials",
-                "warmup_acc_threshold",
-                "warmup_bias_threshold",
             ],
             "Stage": [
                 "stage",
@@ -231,7 +230,6 @@ class TrainingProtocol(TrainingProtocolBase):
             "Staircase": [
                 "staircase_delta_up",
                 "staircase_delta_up_ms",
-                "staircase_target_acc",
                 "staircase_r",
                 "staircase_delta_max",
                 "staircase_delta_max_ms",

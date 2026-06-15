@@ -37,9 +37,12 @@ class RewardPolicy:
     def reward_mult_for_trial(self, *, jackpot: bool = False,
                               effort: bool = False,
                               delta_towers: float | None = None,
-                              single_sided: bool = True) -> float:
+                              single_sided: bool = True,
+                              main_phase: bool = True) -> float:
         self.last_was_jackpot = False
-        if not self.enabled or not single_sided:
+        if not self.enabled or not single_sided or not main_phase:
+            # If both sides are rewarded, does not apply (stage 0).
+            # If not main phase, does not apply (warmup, rescue).
             return 1.0
 
         # Jackpot trials

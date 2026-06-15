@@ -250,8 +250,7 @@ def plot_staircase(df, ax, twin_ax=None):
     return ax2
 
 
-def plot_rolling_accuracy(df, ax, window: int = 100,
-                          rescue_threshold: float | None = None):
+def plot_rolling_accuracy(df, ax, window: int = 100):
     df = df.dropna(subset=["trial_correct"]).copy()
     if df.empty:
         ax.text(0.5, 0.5, "No trial data", ha="center", va="center",

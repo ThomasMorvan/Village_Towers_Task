@@ -25,14 +25,14 @@ class Staircase:
     target: convergence target (e.g. mu_nr >= 1.6)
     harder_direction: "up" (mu_nr increases) | "down" (led_ms decreases)
     enabled: False then no steps applied like in a normal protocol
-    target_acc: optional per-stage p* for staircase equilibrium. (None=default)
+    target_acc: per-stage p* (staircase equilibrium accuracy).
     """
     variable: str = "none"
     start: float = 0.0
     target: float = 0.0
     harder_direction: str = "up"
     enabled: bool = True
-    target_acc: float | None = None
+    target_acc: float = 0.75
 
     def compute_step(self, correct: bool, streak: int,
                      boost_mult: float, settings) -> tuple[float, int, float]:
@@ -51,9 +51,8 @@ class Staircase:
             new_rl = min(-1, streak - 1) if streak <= 0 else -1
         n = abs(new_rl)
 
-        # p* = staircase operating accuracy (per-stage, else global default)
-        p = (self.target_acc if self.target_acc is not None
-             else settings.staircase_target_acc)
+        # p* = staircase operating accuracy (per-stage)
+        p = self.target_acc
         ratio = p / (1.0 - p)  # delta_down = delta_up * ratio
         if self.variable == "tower_duration":
             delta_up = settings.staircase_delta_up_ms
@@ -85,6 +84,7 @@ class StageConfig:
     has_warmup: bool = False
     warmup_min_trials: int | None = None
     warmup_acc_threshold: float | None = None
+    warmup_bias_threshold: float | None = None
     rescue_threshold: float | None = None
     policy: StagePolicy = StagePolicy()
 
@@ -116,7 +116,7 @@ STAGES: dict[int, StageConfig] = {
                               harder_direction="up", target_acc=0.75),),
         color="sandybrown", advance_threshold=0.75, has_warmup=True,
         warmup_min_trials=20, warmup_acc_threshold=0.80,
-        rescue_threshold=0.65),
+        warmup_bias_threshold=0.10, rescue_threshold=0.65),
     3: StageConfig(
         stage=3, name="-LED_ms", rwd_density=8.0,
         no_rwd_density=1.6, trial_is_cued=False,
@@ -125,7 +125,8 @@ STAGES: dict[int, StageConfig] = {
                               start=5000.0, target=200.0,
                               harder_direction="down", target_acc=0.70),),
         color="royalblue", advance_threshold=0.70, timed_leds=True,
-        has_warmup=True, rescue_threshold=0.60),
+        has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
+        warmup_bias_threshold=0.10, rescue_threshold=0.60),
     4: StageConfig(
         stage=4, name="+mu_nr_short", rwd_density=7.7,
         no_rwd_density=1.6, trial_is_cued=False,
@@ -134,14 +135,16 @@ STAGES: dict[int, StageConfig] = {
                               start=1.6, target=2.3,
                               harder_direction="up", target_acc=0.70),),
         color="tomato", advance_threshold=0.70, timed_leds=True,
-        has_warmup=True, rescue_threshold=0.60),
+        has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
+        warmup_bias_threshold=0.10, rescue_threshold=0.60),
     5: StageConfig(
         stage=5, name="Final", rwd_density=7.7,
         no_rwd_density=2.3, trial_is_cued=False,
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(),
         color="gold", advance_threshold=0.0, timed_leds=True,
-        has_warmup=True, rescue_threshold=0.55),
+        has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
+        warmup_bias_threshold=0.10, rescue_threshold=0.55),
 }
 
 MIN_STAGE = 0

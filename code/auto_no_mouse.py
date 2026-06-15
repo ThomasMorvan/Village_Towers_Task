@@ -247,9 +247,12 @@ class AutoNoMouse(AutoNoMouseBase):
 
         delta_towers = len(rwd_leds) - len(no_rwd_leds)
         pol = STAGES[task._odc.stage].policy
+        main_phase = (task._odc.phase == "main"
+                      and not task._odc.rescue_active)
         reward_mult = task._reward_policy.reward_mult_for_trial(
             jackpot=pol.jackpot, effort=pol.effort, delta_towers=delta_towers,
-            single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT))
+            single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT),
+            main_phase=main_phase)
 
         row: dict = {
             "date": task.date,

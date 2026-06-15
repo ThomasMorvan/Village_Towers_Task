@@ -2,9 +2,8 @@
 from collections import deque
 import numpy as np
 from village.custom_classes.task_base import (BpodEvent as Event,
-                                         BpodOutput as Output)
+                                              BpodOutput as Output)
 from village.settings import settings
-from village.manager import manager
 from village.scripts.log import log
 from tower_task_base import TowersTaskBase
 from left_or_right import LeftOrRight, TrialSide, TrialResult
@@ -126,9 +125,7 @@ class TowersTask(TowersTaskBase):
             "checkpoint_floor": self._odc.checkpoint_floor,
             "streak":           self._odc.streak,
             "rolling_acc":      rolling_acc,
-            "warmup_trial":     (self._odc.warmup_n,
-                                 int(getattr(self.settings,
-                                             "warmup_min_trials", 10))),
+            "warmup_trial":     (self._odc.warmup_n, self._odc.warmup_min),
             "adv_label":        adv_label,
         }
 
@@ -434,10 +431,13 @@ class TowersTask(TowersTaskBase):
 
         side = self.current_trial_rwd_side
         pol = STAGES[self._odc.stage].policy
+        main_phase = (self._odc.phase == "main"
+                      and not self._odc.rescue_active)
         self._reward_mult = self._reward_policy.reward_mult_for_trial(
             jackpot=pol.jackpot, effort=pol.effort,
             delta_towers=self._trial_delta_towers(),
-            single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT))
+            single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT),
+            main_phase=main_phase)
         left_opening_time *= self._reward_mult
         right_opening_time *= self._reward_mult
 

@@ -94,9 +94,7 @@ class Online_Plot(OnlinePlotBase):
         shade_rescue(ax, df)
         s = getattr(manager.training, "settings", None)
         window = int(getattr(s, "acc_window", 40))
-        rescue_thr = getattr(s, "rescue_threshold", None)
-        plot_rolling_accuracy(df, ax, window=window,
-                              rescue_threshold=rescue_thr)
+        plot_rolling_accuracy(df, ax, window=window)
 
     def _plot_streak(self, df, ax):
         ax.clear()
