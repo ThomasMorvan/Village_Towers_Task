@@ -64,13 +64,13 @@ class TowersTaskBase(TaskBase):
 
     CALIBRATION_PATH: str = "led_strip_calibration"
 
-    COLOR_ON = Color(255, 255, 255)
+    COLOR_ON = Color(10, 10, 10)
     COLOR_OFF = Color(0, 0, 0)
     COLOR_SELECTED = Color(0, 10, 0)
     COLOR_UNSELECTED = Color(10, 0, 0)
     COLOR_USED = Color(10, 5, 0)
 
-    NUM_LEDS = 155
+    NUM_LEDS = 72 * 2
 
     def __init__(self):
         super().__init__()

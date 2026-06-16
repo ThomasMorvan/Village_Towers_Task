@@ -46,14 +46,14 @@ class TowersTask(TowersTaskBase):
                           ) -> np.ndarray:
         """Map LedPicker indices (0-71) to physical strip indices,
         because strip goes from [0] start-right to [71] end-right,
-        then 10 empty LEDs, then [83] end-left to [154] start-left.
+        then [72] end-left to [143] start-left (no gap, 2*72 LEDs total).
 
         Right side: 0-71 maps directly (entry end = index 0).
         Left side: reversed and shifted (index 0 maps to the entry end of the
-        corridor (physical 154), index 71 maps to the far end (physical 83).
+        corridor (physical 143), index 71 maps to the far end (physical 72).
           physical = LEFT_SIDE_OFFSET + (NUM_LEDS - 1) - leds
         """
-        LEFT_SIDE_OFFSET = 83
+        LEFT_SIDE_OFFSET = 72
         if side == TrialSide.LEFT:
             return LEFT_SIDE_OFFSET + (self.led_picker.NUM_LEDS - 1) - leds
         return leds

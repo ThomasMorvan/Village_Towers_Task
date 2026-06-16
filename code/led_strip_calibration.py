@@ -3,7 +3,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from village.custom_classes.task_base import BpodEvent as Event
 from village.settings import settings
-from tower_task_base import TowersTaskBase
+from tower_task_base import TowersTaskBase, Color
 
 # Task to sequentially turn ON each LED in the strip, capture (with cam_box)
 # the detected (x, y) position, then turn it OFF and move to the next LED.
@@ -37,6 +37,7 @@ class LedStripCalibration(TowersTaskBase):
 
     def start(self):
         super().start()
+        self.COLOR_ON = Color(255, 255, 255)
         self.maximum_number_of_trials = self.led_strip.num_leds
 
     def create_trial(self):
