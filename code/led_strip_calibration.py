@@ -27,7 +27,7 @@ class LedStripCalibration(TowersTaskBase):
         self.settle_time = 0.05  # duration (s) between LED ON and frame cap
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [55, 215, 585, 275, 200])  # L, T, R, B, Thr
+        settings.set("AREA1_BOX", [55, 215, 585, 275, 110])  # L, T, R, B, Thr
         # settings.set("AREA2_BOX", [55, 248, 585, 258, 200])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "OFF")
@@ -37,7 +37,7 @@ class LedStripCalibration(TowersTaskBase):
 
     def start(self):
         super().start()
-        self.COLOR_ON = Color(255, 255, 255)
+        self.COLOR_ON = Color(1, 1, 1)
         self.maximum_number_of_trials = self.led_strip.num_leds
 
     def create_trial(self):
@@ -61,12 +61,12 @@ class LedStripCalibration(TowersTaskBase):
         self.make_plot()
 
     def make_plot(self):
-        _, ax = plt.subplots(figsize=(5, 5))
+        _, ax = plt.subplots(figsize=(6.4, 4.8))
         for i in range(self.led_strip.num_leds):
             x, y = self.led_positions[i].x_hat, self.led_positions[i].y_hat
             ax.scatter(x, y)
         ax.set_xlim(0, 640)
-        ax.set_ylim(480, 0)
+        # ax.set_ylim(480, 0)
         ax.set_xlabel("X (px)")
         ax.set_ylabel("Y (px)")
         path = Path(settings.get("DATA_DIRECTORY"),
