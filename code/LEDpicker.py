@@ -170,6 +170,16 @@ if __name__ == "__main__":
     print(f"Simulated {iters} iterations in {end_t - start_t:.2f} seconds")
     print(f"weird: {weird} out of {iters} iterations ({weird/iters:.2%})")
 
+    from scipy.special import factorial, iv
+    _x = np.arange(0, 20, 1)
+
+    def _poisson(x, mu):
+        return (mu ** x) * np.exp(-mu) / factorial(x)
+
+    def _skellam(x, mu1, mu2):
+        return (np.exp(-(mu1 + mu2)) * (mu1 / mu2) ** (x / 2)
+                * iv(np.abs(x), 2 * np.sqrt(mu1 * mu2)))
+
     fig, axs = plt.subplots(2, 2, figsize=(10, 10))
     axs = axs.flatten()
     bins = np.arange(0, 20, 1)
@@ -178,14 +188,17 @@ if __name__ == "__main__":
     axs[0].set_xlabel(f"#Towers REWARDED side (mu={lp.mu_reward})")
     axs[0].hist(_Rs, bins=bins, density=True, histtype='step',
                 label="weird R", lw=2)
+    axs[0].plot(_x, _poisson(_x, lp.mu_reward), 'r--', label="Poisson PDF")
 
     axs[1].hist(NRs, bins=bins, density=True)
     axs[1].set_xlabel(f"#Towers NON-REWARDED side (mu={lp.mu_no_reward})")
     axs[1].hist(_NRs, bins=bins, density=True, histtype='step',
                 label="weird NR", lw=2)
-
+    axs[1].plot(_x, _poisson(_x, lp.mu_no_reward), 'r--', label="Poisson PDF")
     axs[2].hist(deltas, bins=bins, density=True)
     axs[2].set_xlabel("Delta (|#R - #NR|)")
+    axs[2].plot(_x, _skellam(_x, lp.mu_reward, lp.mu_no_reward), 'r--',
+                label="Skellam PDF")
 
     for ax in axs[0:3]:
         ax.set_ylabel("Density")
