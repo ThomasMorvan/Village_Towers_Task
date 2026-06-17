@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 IMAGE_FOLDER = "/home/thomas/Documents/Village_Towers_Task/data/calib*.png"
 
 GRID_SIZE = (30, 18)
-DOT_SPACING = 17
+DOT_SPACING = 48  # mm, center-to-center spacing on the printed pattern
 
 OBJ_POINTS_TEMPLATE = np.zeros((GRID_SIZE[0] * GRID_SIZE[1], 3), np.float32)
 OBJ_POINTS_TEMPLATE[:, :2] = np.mgrid[0:GRID_SIZE[0], 0:GRID_SIZE[1]].T.reshape(-1, 2) * DOT_SPACING
