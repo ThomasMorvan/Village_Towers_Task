@@ -19,13 +19,13 @@ class TowersTask(TowersTaskBase):
 
     def __init__(self):
         super().__init__()
-        self._furthest_x = 641  # FIXME: self.cam_box.width not initialized yet
+        self._furthest_x = settings.get("CAM_BOX_RESOLUTION")[0] + 1
         self._this_trial_leds = {TrialSide.LEFT: np.array([], dtype=int),
                                  TrialSide.RIGHT: np.array([], dtype=int)}
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []  # sorted list of (trigger_x, led_idx)
-        self.next_trigger = 641   # display only: x position of leds
+        self.next_trigger = settings.get("CAM_BOX_RESOLUTION")[0] + 1
         self.distance_offset = 50  # FIXME: px in front of centroid for trigger
         self.left_or_right = LeftOrRight()
         self.current_trial_rwd_side: TrialSide = TrialSide.NONE
@@ -374,7 +374,7 @@ class TowersTask(TowersTaskBase):
         if self.led_triggers:
             self.next_trigger = self.led_triggers[0][0]
         else:
-            self.next_trigger = 641
+            self.next_trigger = settings.get("CAM_BOX_RESOLUTION")[0] + 1
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
 
     def debug_color_state_leds(self):
@@ -561,8 +561,8 @@ class TowersTask(TowersTaskBase):
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []
-        self.next_trigger = 641
-        self._furthest_x = 641
+        self.next_trigger = settings.get("CAM_BOX_RESOLUTION")[0] + 1
+        self._furthest_x = settings.get("CAM_BOX_RESOLUTION")[0] + 1
         self.cam_box.items_to_draw["furthest_x"] = self._furthest_x
         self.cam_box.items_to_draw["next_trigger"] = self.next_trigger
         self.cam_box.items_to_draw["led_pos"] = []
