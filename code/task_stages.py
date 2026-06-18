@@ -74,7 +74,7 @@ class StageConfig:
     rwd_density: float
     no_rwd_density: float  # starting value; staircase overrides from S2
     trial_is_cued: bool  # always False in v2
-    give_free_reward: bool  # always False in v2
+    give_free_reward: bool  # always True in v2
     both_sides_rewarded: bool  # True only in Stage 0
     staircases: tuple = ()  # tuple[Staircase1, Staircase2, ...]
     color: str = "w"

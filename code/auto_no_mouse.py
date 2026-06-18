@@ -253,6 +253,16 @@ class AutoNoMouse(AutoNoMouseBase):
             jackpot=pol.jackpot, effort=pol.effort, delta_towers=delta_towers,
             single_sided=side in (TrialSide.LEFT, TrialSide.RIGHT),
             main_phase=main_phase)
+        s = task.settings
+        if both_sides:
+            side_ml = 2 * s.big_reward_amount_ml
+        elif correct:
+            side_ml = (s.jackpot_reward_amount_ml
+                       if task._reward_policy.last_was_jackpot
+                       else s.big_reward_amount_ml * reward_mult)
+        else:
+            side_ml = 0.0
+        water_ml = side_ml + s.small_reward_amount_ml
 
         row: dict = {
             "date": task.date,
@@ -283,7 +293,7 @@ class AutoNoMouse(AutoNoMouseBase):
             "L LEDs": left_leds,
             "R LEDs": right_leds,
             "trial_side": side.value,
-            "water": task.settings.reward_amount_ml * reward_mult,
+            "water": water_ml,
             "reward_mult": reward_mult,
             "jackpot": int(task._reward_policy.last_was_jackpot),
             "trial_correct": correct,

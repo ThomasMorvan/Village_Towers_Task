@@ -36,7 +36,7 @@ class TowersTask(TowersTaskBase):
         self.led_picker = LedPicker(rwd_density=0.0, no_rwd_density=0.0)
 
         self.trial_is_cued = False
-        self.give_free_reward = False
+        self.give_free_reward = True
 
         self._odc = OnlineDifficultyController()
         self._reward_policy = RewardPolicy()
@@ -194,18 +194,12 @@ class TowersTask(TowersTaskBase):
         super().start()
         self.load_led_calibration()
 
-        self.left_valve_opening_time = 1
-        #     self.water_calibration.get_valve_time(
-        #     port=1, volume=self.settings.big_reward_amount_ml
-        # )
-        self.middle_valve_opening_time = .250
-        #     self.water_calibration.get_valve_time(
-        #     port=2, volume=self.settings.small_reward_amount_ml
-        # )
-        self.right_valve_opening_time = 1
-        #     self.water_calibration.get_valve_time(
-        #     port=3, volume=self.settings.big_reward_amount_ml
-        # )
+        self.left_valve_opening_time = self.water_calibration.get_valve_time(
+            port=1, volume=self.settings.big_reward_amount_ml)
+        self.middle_valve_opening_time = self.water_calibration.get_valve_time(
+            port=2, volume=self.settings.small_reward_amount_ml)
+        self.right_valve_opening_time = self.water_calibration.get_valve_time(
+            port=3, volume=self.settings.big_reward_amount_ml)
         self.settings.iti_time = 0
         self.settings.response_time = 60
 
@@ -511,6 +505,25 @@ class TowersTask(TowersTaskBase):
                            if e in port_to_side), None)
         return port_to_side.get(first_poke) == self.current_trial_rwd_side
 
+    def _water_delivered_ml(self) -> float:
+        """Actual volume delivered: side port (1/3, big or jackpot, only
+        if that side was chosen correctly) plus the middle port (2) free
+        reward, if one was given."""
+        s = self.settings
+        if self.current_trial_rwd_side == TrialSide.BOTH:
+            side_ml = 2 * s.big_reward_amount_ml
+        elif self.is_trial_correct:
+            side_ml = (s.jackpot_reward_amount_ml
+                       if self._reward_policy.last_was_jackpot
+                       else s.big_reward_amount_ml * self._reward_mult)
+        else:
+            side_ml = 0.0
+        evts = self.trial_data["ordered_list_of_events"]
+        small_ml = (s.small_reward_amount_ml
+                    if (self.give_free_reward and "Port2In" in evts)
+                    else 0.0)
+        return side_ml + small_ml
+
     def after_trial(self):
         self.register_value(f"{TrialSide.LEFT.value} LEDs",
                             self._this_trial_leds[TrialSide.LEFT].tolist())
@@ -518,14 +531,12 @@ class TowersTask(TowersTaskBase):
                             self._this_trial_leds[TrialSide.RIGHT].tolist())
 
         self.register_value("trial_side", self.current_trial_rwd_side.value)
-        self.register_value("water",
-                            self.settings.reward_amount_ml * self._reward_mult)
+        self.is_trial_correct = self.current_trial_is_correct()
+        self.register_value("trial_correct", self.is_trial_correct)
+        self.register_value("water", self._water_delivered_ml())
         self.register_value("reward_mult", self._reward_mult)
         self.register_value("jackpot",
                             int(self._reward_policy.last_was_jackpot))
-
-        self.is_trial_correct = self.current_trial_is_correct()
-        self.register_value("trial_correct", self.is_trial_correct)
 
         # LED picker info
         self.register_value("rwd_density", self.led_picker.mu_reward)
