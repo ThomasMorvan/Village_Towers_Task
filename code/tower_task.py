@@ -196,11 +196,11 @@ class TowersTask(TowersTaskBase):
         water_cal = self.calibrations.bpod_water_calibration
 
         self.left_valve_opening_time = water_cal.get_valve_time(
-            port=1, volume=self.settings.big_reward_amount_ml)
+            port=1, volume=self.settings.big_reward_amount_ul)
         self.middle_valve_opening_time = water_cal.get_valve_time(
-            port=2, volume=self.settings.small_reward_amount_ml)
+            port=2, volume=self.settings.small_reward_amount_ul)
         self.right_valve_opening_time = water_cal.get_valve_time(
-            port=3, volume=self.settings.big_reward_amount_ml)
+            port=3, volume=self.settings.big_reward_amount_ul)
         self.settings.iti_time = 0
         self.settings.response_time = 60
 
@@ -513,24 +513,24 @@ class TowersTask(TowersTaskBase):
                            if e in port_to_side), None)
         return port_to_side.get(first_poke) == self.current_trial_rwd_side
 
-    def _water_delivered_ml(self) -> float:
+    def _water_delivered_ul(self) -> float:
         """Actual volume delivered: side port (1/3, big or jackpot, only
         if that side was chosen correctly) plus the middle port (2) free
         reward, if one was given."""
         s = self.settings
         if self.current_trial_rwd_side == TrialSide.BOTH:
-            side_ml = 2 * s.big_reward_amount_ml
+            side_ul = 2 * s.big_reward_amount_ul
         elif self.is_trial_correct:
-            side_ml = (s.jackpot_reward_amount_ml
+            side_ul = (s.jackpot_reward_amount_ul
                        if self._reward_policy.last_was_jackpot
-                       else s.big_reward_amount_ml * self._reward_mult)
+                       else s.big_reward_amount_ul * self._reward_mult)
         else:
-            side_ml = 0.0
+            side_ul = 0.0
         evts = self.trial_data["ordered_list_of_events"]
-        small_ml = (s.small_reward_amount_ml
+        small_ul = (s.small_reward_amount_ul
                     if (self.give_free_reward and "Port2In" in evts)
                     else 0.0)
-        return side_ml + small_ml
+        return side_ul + small_ul
 
     def after_trial(self):
         self.register_value(f"{TrialSide.LEFT.value} LEDs",
@@ -541,7 +541,7 @@ class TowersTask(TowersTaskBase):
         self.register_value("trial_side", self.current_trial_rwd_side.value)
         self.is_trial_correct = self.current_trial_is_correct()
         self.register_value("trial_correct", self.is_trial_correct)
-        self.register_value("water", self._water_delivered_ml())
+        self.register_value("water", self._water_delivered_ul())
         self.register_value("reward_mult", self._reward_mult)
         self.register_value("jackpot",
                             int(self._reward_policy.last_was_jackpot))

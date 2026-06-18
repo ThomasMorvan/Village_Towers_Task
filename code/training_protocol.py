@@ -153,9 +153,9 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.reward_effort_delta_easy = 6.0  # delta with no bonus
         self.settings.reward_jackpot_mult = 10.0
         self.settings.reward_jackpot_prob = 0.1  # of correct trials
-        self.settings.small_reward_amount_ml = 2.5 / 1000  # ml, port 2
-        self.settings.big_reward_amount_ml = 5 / 1000  # ml, port 1/3
-        self.settings.jackpot_reward_amount_ml = 50 / 1000  # ml, port 1/3
+        self.settings.small_reward_amount_ul = 2.5  # µl, port 2
+        self.settings.big_reward_amount_ul = 5  # µl, port 1/3
+        self.settings.jackpot_reward_amount_ul = 50  # µl, port 1/3
 
         # Input/output settings
         self.settings.light_intensity_high = 255
@@ -203,9 +203,9 @@ class TrainingProtocol(TrainingProtocolBase):
     def define_gui_tabs(self) -> None:
         self.gui_tabs = {
             "Reward and reward policy": [
-                "small_reward_amount_ml",
-                "big_reward_amount_ml",
-                "jackpot_reward_amount_ml",
+                "small_reward_amount_ul",
+                "big_reward_amount_ul",
+                "jackpot_reward_amount_ul",
                 "light_intensity_high",
                 "light_intensity_low",
                 "reward_policy_enabled",
