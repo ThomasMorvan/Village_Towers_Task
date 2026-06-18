@@ -193,12 +193,13 @@ class TowersTask(TowersTaskBase):
     def start(self):
         super().start()
         self.load_led_calibration()
+        water_cal = self.calibrations.bpod_water_calibration
 
-        self.left_valve_opening_time = self.water_calibration.get_valve_time(
+        self.left_valve_opening_time = water_cal.get_valve_time(
             port=1, volume=self.settings.big_reward_amount_ml)
-        self.middle_valve_opening_time = self.water_calibration.get_valve_time(
+        self.middle_valve_opening_time = water_cal.get_valve_time(
             port=2, volume=self.settings.small_reward_amount_ml)
-        self.right_valve_opening_time = self.water_calibration.get_valve_time(
+        self.right_valve_opening_time = water_cal.get_valve_time(
             port=3, volume=self.settings.big_reward_amount_ml)
         self.settings.iti_time = 0
         self.settings.response_time = 60
