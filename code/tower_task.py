@@ -183,7 +183,7 @@ class TowersTask(TowersTaskBase):
                                           self._odc.difficulty.mu_nr)
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [55, 220, 585, 258, 65])
+        settings.set("AREA1_BOX", [55, 225, 585, 265, 65])
         settings.set("USAGE1_BOX", "ALLOWED")
         settings.set("USAGE2_BOX", "OFF")
         settings.set("USAGE3_BOX", "OFF")
