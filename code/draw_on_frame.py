@@ -266,6 +266,40 @@ class DrawFurthestX(CameraDrawBase):
             for pos in led_pos_used:
                 painter.drawEllipse(QPoint(sx(pos.x_hat), sy(pos.y_hat)), r, r)
 
+        verify = cam.items_to_draw.get("verify_nearest")
+        if verify:
+            cx, cy = verify["centroid"]
+            lx, ly = verify["led_xy"]
+            dx = verify["dx_px"]
+            led_idx = verify["led_idx"]
+
+            # filled dot at current centroid
+            painter.setPen(QPen(QColor(255, 255, 0), 1))
+            painter.setBrush(QBrush(QColor(255, 255, 0)))
+            painter.drawEllipse(QPoint(sx(cx), sy(cy)), r, r)
+
+            # horizontal line from centroid to nearest LED (x-only match)
+            painter.setPen(QPen(QColor(255, 255, 0), 2))
+            painter.drawLine(sx(cx), sy(cy), sx(lx), sy(cy))
+
+            # larger ring around the nearest LED
+            painter.setBrush(QBrush())
+            painter.drawEllipse(QPoint(sx(lx), sy(ly)),
+                                int(r * 1.8), int(r * 1.8))
+
+            # text label next to LED circle
+            label = f"LED {led_idx}  dx={dx:+d}px"
+            painter.setPen(QPen(QColor(255, 255, 0), 1))
+            painter.drawText(sx(lx) + int(r * 2) + 4, sy(ly) + 4, label)
+
+            # HUD line in the middle-left of the frame
+            hud_x = sx(10)
+            hud_y = sy(cam.height // 2)
+            painter.setPen(QPen(QColor(255, 255, 0), 1))
+            painter.drawText(hud_x, hud_y,
+                             f"LED {led_idx}  dx={dx:+d}px"
+                             f"  centroid=({cx},{cy})")
+
         maxlen = 25 * 5
         anm = cam.items_to_draw.get("auto_instance")
 
