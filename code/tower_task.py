@@ -442,12 +442,19 @@ class TowersTask(TowersTaskBase):
             output_actions=[]
         )
 
+        if STAGES[self._odc.stage].both_sides_rewarded:  # no timeout in S0
+            choice_timer = 0
+            choice_conditions = {Event.Port1In: "POKE LEFT",
+                                 Event.Port3In: "POKE RIGHT"}
+        else:
+            choice_timer = self.settings.response_time
+            choice_conditions = {Event.Tup: "END TRIAL",
+                                 Event.Port1In: "POKE LEFT",
+                                 Event.Port3In: "POKE RIGHT"}
         self.bpod.add_state(
             state_name="WAIT FOR CHOICE POKE",
-            state_timer=self.settings.response_time,
-            state_change_conditions={Event.Tup: "END TRIAL",
-                                     Event.Port1In: "POKE LEFT",
-                                     Event.Port3In: "POKE RIGHT"},
+            state_timer=choice_timer,
+            state_change_conditions=choice_conditions,
             output_actions=[("SoftCode", self.SOFTCODE_CAMERA_ACCEPT),
                             *self.cues],
         )
