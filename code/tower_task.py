@@ -186,9 +186,9 @@ class TowersTask(TowersTaskBase):
         settings.set("AREA1_BOX", [55, 225, 585, 265, 65])
         settings.set("USAGE1_BOX", "ALLOWED")
         # Stage 0 proximity reward: area2 = left port, area3 = right port.
-        settings.set("AREA2_BOX", [0, 375, 55, 440, 65])
-        settings.set("AREA3_BOX", [0, 60, 55, 125, 65])
-        settings.set("AREA4_BOX", [580, 215, 540, 285, 65])
+        settings.set("AREA2_BOX", [15, 370, 50, 430, 65])
+        settings.set("AREA3_BOX", [25, 60, 60, 130, 65])
+        settings.set("AREA4_BOX", [585, 215, 640, 285, 65])
         settings.set("USAGE2_BOX", "TRIGGER")
         settings.set("USAGE3_BOX", "TRIGGER")
         settings.set("USAGE4_BOX", "TRIGGER")
