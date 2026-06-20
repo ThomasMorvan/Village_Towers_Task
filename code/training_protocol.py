@@ -74,7 +74,8 @@ class TrainingProtocol(TrainingProtocolBase):
 
     def default_training_settings(self) -> None:
         self.settings.next_task = "TowersTask"
-        self.settings.refractory_period = 3600 * 4
+        self.settings.refractory_period = 3600 * 4  # default, will be updated
+        self.settings.max_refractory = 3600 * 4
         self.settings.minimum_duration = 600
         self.settings.maximum_duration = 3600
 
@@ -163,6 +164,18 @@ class TrainingProtocol(TrainingProtocolBase):
 
     def update_training_settings(self) -> None:
         df_task = self.df[self.df["task"] == "TowersTask"]
+
+        # Scale refractory period linearly with previous session duration:
+        # a session of maximum_duration (1h) maps to max_refractory (cap at 4h)
+        # a short session (minimum_duration 10min) maps to 40 min.
+        if not df_task.empty:
+            last = df_task[df_task["session"] == df_task["session"].max()]
+            time_in_task = last["TRIAL_END"].max() - last["TRIAL_START"].min()
+            if time_in_task > 0:
+                frac = min(1.0, time_in_task / self.settings.maximum_duration)
+                self.settings.refractory_period = int(
+                    self.settings.max_refractory * frac)
+
         df_task = df_task.dropna(subset=["stage"])
         if df_task.empty:
             return
