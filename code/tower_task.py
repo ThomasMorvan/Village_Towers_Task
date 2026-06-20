@@ -185,9 +185,13 @@ class TowersTask(TowersTaskBase):
     def set_ui_settings(self):
         settings.set("AREA1_BOX", [55, 225, 585, 265, 65])
         settings.set("USAGE1_BOX", "ALLOWED")
-        settings.set("USAGE2_BOX", "OFF")
-        settings.set("USAGE3_BOX", "OFF")
-        settings.set("USAGE4_BOX", "OFF")
+        # Stage 0 proximity reward: area2 = left port, area3 = right port.
+        settings.set("AREA2_BOX", [0, 375, 55, 440, 65])
+        settings.set("AREA3_BOX", [0, 60, 55, 125, 65])
+        settings.set("AREA4_BOX", [580, 215, 540, 285, 65])
+        settings.set("USAGE2_BOX", "TRIGGER")
+        settings.set("USAGE3_BOX", "TRIGGER")
+        settings.set("USAGE4_BOX", "TRIGGER")
         settings.set("DETECTION_COLOR", "BLACK")
 
     def start(self):
@@ -397,6 +401,8 @@ class TowersTask(TowersTaskBase):
             left_opening_time = self.left_valve_opening_time
             right_outputs = [Output.Valve3]
             right_opening_time = self.right_valve_opening_time
+            self.cues.append((Output.PWM1, self.settings.light_intensity_high))
+            self.cues.append((Output.PWM3, self.settings.light_intensity_high))
         else:
             # Stages 1 to 3: only the rewarded side opens its valve
             self.get_LEDs_for_trial()

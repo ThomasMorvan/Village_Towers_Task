@@ -25,3 +25,17 @@ class LEDTrigger(CameraTriggerBase):
             self.task.execute_function(3)
         except Exception:
             print("Error running function" + str(3))
+
+        # Stage 0: deliver reward on proximity instead of requiring a poke.
+        try:
+            if self.task._odc.stage == 0:
+                sma = self.task.bpod.sma
+                if sma.state_names[sma.current_state] == "WAIT FOR CHOICE POKE":
+                    if cam.area2_is_triggered:
+                        self.task.bpod.poke(1)  # left port
+                    elif cam.area3_is_triggered:
+                        self.task.bpod.poke(3)  # right port
+                    elif cam.area4_is_triggered:
+                        self.task.bpod.poke(2)  # center port
+        except (IndexError, AttributeError):
+            pass
