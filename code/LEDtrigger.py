@@ -30,12 +30,14 @@ class LEDTrigger(CameraTriggerBase):
         try:
             if self.task._odc.stage == 0:
                 sma = self.task.bpod.sma
-                if sma.state_names[sma.current_state] == "WAIT FOR CHOICE POKE":
+                state = sma.state_names[sma.current_state]
+                if state == "WAIT FOR CHOICE POKE":
                     if cam.area2_is_triggered:
                         self.task.bpod.poke(1)  # left port
                     elif cam.area3_is_triggered:
                         self.task.bpod.poke(3)  # right port
-                    elif cam.area4_is_triggered:
+                elif state == "POKE MIDDLE":
+                    if cam.area4_is_triggered:
                         self.task.bpod.poke(2)  # center port
         except (IndexError, AttributeError):
             pass
