@@ -174,6 +174,14 @@ class OnlineDifficultyController:
         else:
             self.difficulty = Difficulty(mu_r=mu_r)
 
+        # Visual cue intensity (S1 staircase).
+        li_max = int(getattr(settings, "light_intensity_high", 255))
+        if self.stage == 1 and resume:
+            self.difficulty.light_intensity = int(
+                getattr(settings, "last_light_intensity", li_max))
+        else:
+            self.difficulty.light_intensity = li_max
+
         self._streak = 0
         self._perf_window = deque(maxlen=int(settings.acc_window))
         self._rescue_trials_left = 0
@@ -219,6 +227,8 @@ class OnlineDifficultyController:
             correct, self._streak, boost_mult, settings)
         self.last_delta = delta
         self._apply_staircase_delta(delta, correct, settings)
+        if self.stage == 1:
+            return self._check_s1_advance(settings, bias)
         return self._check_checkpoint(settings)
 
     def _reset_warmup(self) -> None:
@@ -302,14 +312,17 @@ class OnlineDifficultyController:
                 and self.stage == 1
                 and getattr(settings, "stage", 0) <= MAX_STAGE):
             rolling_acc = sum(self._perf_window) / len(self._perf_window)
-            if rolling_acc >= self.config.advance_threshold and bias <= 0.10:
+            if (rolling_acc >= self.config.advance_threshold and bias <= 0.10
+                    and self.difficulty.light_intensity
+                    <= self.config.staircase.target):
                 return self._pass_checkpoint(to_stage=2, settings=settings)
         return AdaptationEvent()
 
     def _apply_staircase_delta(self, delta: float, correct: bool,
                                settings) -> None:
         cfg = self.config
-        if cfg.staircase.harder_direction == "up":
+        var = cfg.staircase.variable
+        if var == "minority_density":
             if correct:
                 self.difficulty.mu_nr = min(
                     self.difficulty.mu_nr + delta, cfg.staircase.target)
@@ -317,7 +330,7 @@ class OnlineDifficultyController:
                 self.difficulty.mu_nr = max(
                     self.difficulty.mu_nr - delta, self.checkpoint_floor)
 
-        elif cfg.staircase.harder_direction == "down":
+        elif var == "tower_duration":
             if correct:
                 self.difficulty.led_ms = max(
                     self.difficulty.led_ms - int(delta),
@@ -326,6 +339,16 @@ class OnlineDifficultyController:
                 self.difficulty.led_ms = min(
                     self.difficulty.led_ms + int(delta),
                     int(self.checkpoint_floor))
+
+        elif var == "light_intensity":
+            if correct:
+                self.difficulty.light_intensity = max(
+                    self.difficulty.light_intensity - int(delta),
+                    int(cfg.staircase.target))
+            else:
+                self.difficulty.light_intensity = min(
+                    self.difficulty.light_intensity + int(delta),
+                    int(settings.light_intensity_high))
 
     def _check_checkpoint(self, settings) -> AdaptationEvent:
         if getattr(settings, "stage", 0) > MAX_STAGE:

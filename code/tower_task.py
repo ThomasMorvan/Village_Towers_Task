@@ -96,7 +96,10 @@ class TowersTask(TowersTaskBase):
             bias = abs(self.left_or_right.current_empR - 0.5)
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             bias_lbl = ("Bias:", f" {bias*100:.0f}/10%", bias*100 <= 10)
-            adv_label = [acc_lbl, bias_lbl]
+            cue = self._odc.difficulty.light_intensity
+            cue_lbl = ("Cue:", f" {cue}/{cfg.staircase.target}",
+                       cue <= cfg.staircase.target)
+            adv_label = [acc_lbl, bias_lbl, cue_lbl]
         elif stage in (2, 4):
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             mu_nr_lbl = ("mu_nr:", (f" {self._odc.difficulty.mu_nr:.2f}/"
@@ -401,8 +404,11 @@ class TowersTask(TowersTaskBase):
             left_opening_time = self.left_valve_opening_time
             right_outputs = [Output.Valve3]
             right_opening_time = self.right_valve_opening_time
-            self.cues.append((Output.PWM1, self.settings.light_intensity_high))
-            self.cues.append((Output.PWM3, self.settings.light_intensity_high))
+            if self.trial_is_cued:
+                self.cues.append((Output.PWM1,
+                                  self._odc.difficulty.light_intensity))
+                self.cues.append((Output.PWM3,
+                                  self._odc.difficulty.light_intensity))
         else:
             # Stages 1 to 3: only the rewarded side opens its valve
             self.get_LEDs_for_trial()
@@ -413,9 +419,7 @@ class TowersTask(TowersTaskBase):
                 right_opening_time = 0
                 if self.trial_is_cued:
                     self.cues.append((Output.PWM1,
-                                      self.settings.light_intensity_high))
-                    self.cues.append((Output.PWM3,
-                                      self.settings.light_intensity_low))
+                                      self._odc.difficulty.light_intensity))
             elif self.current_trial_rwd_side == TrialSide.RIGHT:
                 right_outputs = [Output.Valve3]
                 right_opening_time = self.right_valve_opening_time
@@ -423,9 +427,7 @@ class TowersTask(TowersTaskBase):
                 left_opening_time = 0
                 if self.trial_is_cued:
                     self.cues.append((Output.PWM3,
-                                      self.settings.light_intensity_high))
-                    self.cues.append((Output.PWM1,
-                                      self.settings.light_intensity_low))
+                                      self._odc.difficulty.light_intensity))
             else:
                 raise ValueError(
                     f"Invalid trial side: {self.current_trial_rwd_side}")
@@ -571,6 +573,8 @@ class TowersTask(TowersTaskBase):
                             0.0 if self._odc.phase == "warmup"
                             else self._odc.difficulty.mu_nr)
         self.register_value("led_ms", self._odc.difficulty.led_ms)
+        self.register_value("light_intensity",
+                            self._odc.difficulty.light_intensity)
         self.register_value("checkpoint_floor", self._odc.checkpoint_floor)
         self.register_value("streak", self._odc.streak)
         self.register_value("checkpoint", self._odc.checkpoint)

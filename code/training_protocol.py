@@ -141,6 +141,10 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.staircase_delta_max_ms = 100  # ms, max step size
         self.settings.min_tower_duration = 200  # ms, led ms target
 
+        # Stage 1 cue-fade staircase (PWM scale 0-255), goes down to 0
+        self.settings.staircase_delta_up_intensity = 5  # PWM per correct
+        self.settings.staircase_delta_max_intensity = 50  # PWM, max step
+
         # Task geometry
         self.settings.led_start_dead_zone_cm = 10
         self.settings.acc_window = 40  # rolling accuracy window (trials)
@@ -159,7 +163,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.jackpot_reward_amount_ul = 50  # µl, port 1/3
 
         # Input/output settings
-        self.settings.light_intensity_high = 255
+        self.settings.light_intensity_high = 255  # bright cue (port 2, S1 max)
         self.settings.light_intensity_low = 50
 
     def update_training_settings(self) -> None:
@@ -212,6 +216,8 @@ class TrainingProtocol(TrainingProtocolBase):
                 "checkpoint_floor", last_row.get("mu_nr", 0.0)))
             self.settings.last_mu_nr = float(last_row.get("mu_nr", 0.0))
             self.settings.last_led_ms = int(last_row.get("led_ms", 5000))
+            self.settings.last_light_intensity = int(last_row.get(
+                "light_intensity", self.settings.light_intensity_high))
 
     def define_gui_tabs(self) -> None:
         self.gui_tabs = {
@@ -243,9 +249,11 @@ class TrainingProtocol(TrainingProtocolBase):
             "Staircase": [
                 "staircase_delta_up",
                 "staircase_delta_up_ms",
+                "staircase_delta_up_intensity",
                 "staircase_r",
                 "staircase_delta_max",
                 "staircase_delta_max_ms",
+                "staircase_delta_max_intensity",
                 "staircase_M",
                 "staircase_tau",
                 "onset_boost_trials",

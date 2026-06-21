@@ -309,6 +309,7 @@ class AutoNoMouse(AutoNoMouseBase):
             "mu_nr": (0.0 if task._odc.phase == "warmup"
                       else task._odc.difficulty.mu_nr),
             "led_ms": task._odc.difficulty.led_ms,
+            "light_intensity": task._odc.difficulty.light_intensity,
             "checkpoint_floor": task._odc.checkpoint_floor,
             "streak": task._odc.streak,
             "checkpoint": task._odc.checkpoint,

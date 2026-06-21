@@ -14,13 +14,15 @@ class Difficulty:
     mu_r: float = 0.0  # rewarded tower density (m^-1)
     mu_nr: float = 0.0  # non-rewarded tower density (m^-1)
     led_ms: int = 5000  # LED on-duration (ms)
+    light_intensity: int = 255  # S1 visual cue PWM (ports 1/3), fades 255->0
 
 
 @dataclass(frozen=True)
 class Staircase:
     """Encapsulates one Kaernbach adaptive staircase.
 
-    variable: column driven ("none" | "minority_density" | "tower_duration")
+    variable: column driven ("none" | "minority_density" | "tower_duration"
+              | "light_intensity")
     start: initial value when stage is entered
     target: convergence target (e.g. mu_nr >= 1.6)
     harder_direction: "up" (mu_nr increases) | "down" (led_ms decreases)
@@ -57,6 +59,9 @@ class Staircase:
         if self.variable == "tower_duration":
             delta_up = settings.staircase_delta_up_ms
             delta_max = settings.staircase_delta_max_ms
+        elif self.variable == "light_intensity":
+            delta_up = settings.staircase_delta_up_intensity
+            delta_max = settings.staircase_delta_max_intensity
         else:
             delta_up = settings.staircase_delta_up
             delta_max = settings.staircase_delta_max
@@ -97,15 +102,17 @@ class StageConfig:
 STAGES: dict[int, StageConfig] = {
     0: StageConfig(
         stage=0, name="BackForth", rwd_density=0.0,
-        no_rwd_density=0.0, trial_is_cued=False,
+        no_rwd_density=0.0, trial_is_cued=True,
         give_free_reward=True, both_sides_rewarded=True,
         staircases=(),
         color="blueviolet", advance_threshold=0.0),
     1: StageConfig(
         stage=1, name="OneSide", rwd_density=8.4,
-        no_rwd_density=0.0, trial_is_cued=False,
+        no_rwd_density=0.0, trial_is_cued=True,
         give_free_reward=True, both_sides_rewarded=False,
-        staircases=(),
+        staircases=(Staircase(variable="light_intensity",
+                              start=255, target=0,
+                              harder_direction="down", target_acc=0.80),),
         color="lawngreen", advance_threshold=0.80,
         policy=StagePolicy(jackpot=True)),
     2: StageConfig(
