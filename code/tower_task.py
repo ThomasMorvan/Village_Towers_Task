@@ -90,7 +90,9 @@ class TowersTask(TowersTaskBase):
             n_req = int(getattr(self.settings, "s0_required_sessions", 2))
             sessions_lbl = ("Sessions:", f" {n_valid}/{n_req}",
                             n_valid >= n_req)
-            adv_label = [trials_lbl, sessions_lbl]
+            prox = getattr(self.settings, "proximity_trigger", True)
+            step_lbl = ("Step:", " ROI" if prox else " poke", True)
+            adv_label = [step_lbl, trials_lbl, sessions_lbl]
 
         elif stage == 1:
             bias = abs(self.left_or_right.current_empR - 0.5)
@@ -583,6 +585,9 @@ class TowersTask(TowersTaskBase):
         self.register_value("give_free_reward", int(self.give_free_reward))
         self.register_value("rescue", int(self._odc.rescue_active))
         self.register_value("delta_towers", self._trial_delta_towers())
+        self.register_value("proximity_trigger",
+                            int(getattr(self.settings,
+                                        "proximity_trigger", True)))
 
         log.info(f"Trial: side={self.current_trial_rwd_side.value}, "
                  f"correct={self.is_trial_correct}")

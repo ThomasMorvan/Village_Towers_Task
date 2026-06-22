@@ -26,9 +26,13 @@ class LEDTrigger(CameraTriggerBase):
         except Exception:
             print("Error running function" + str(3))
 
-        # Stage 0: deliver reward on proximity instead of requiring a poke.
+        # Stage 0:
+        #    Step 1: deliver reward when mouse gets in ROI instead of poke
+        #    Step 2: now requires a real poke.
         try:
-            if self.task._odc.stage == 0:
+            if (self.task._odc.stage == 0
+                    and getattr(self.task.settings,
+                                "proximity_trigger", True)):
                 sma = self.task.bpod.sma
                 state = sma.state_names[sma.current_state]
                 if state == "WAIT FOR CHOICE POKE":
@@ -39,5 +43,6 @@ class LEDTrigger(CameraTriggerBase):
                 elif state == "POKE MIDDLE":
                     if cam.area4_is_triggered:
                         self.task.bpod.poke(2)  # center port
-        except (IndexError, AttributeError):
+        except (IndexError, AttributeError) as e:
+            print(f"[LEDTrigger] Error processing LED trigger: {e}")
             pass

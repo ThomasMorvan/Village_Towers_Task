@@ -119,25 +119,41 @@ def shade_rescue(ax, df):
                    zorder=1, lw=0, label="Rescue")
 
 
+def _stage_label(stage, df_seg):
+    """S0 splits into two steps (ROI proximity / poke); label accordingly."""
+    label = f"S{int(stage)}"
+    if int(stage) == 0 and "proximity_trigger" in df_seg.columns:
+        vals = df_seg["proximity_trigger"].dropna()
+        if not vals.empty:
+            label += "·ROI" if bool(vals.iloc[-1]) else "·poke"
+    return label
+
+
 def shade_stages(ax, df):
     """Background color for each stage."""
     df = df.reset_index(drop=True)
     cur_s = df["stage"].iloc[0]
+    start_i = 0
     start_t = df["trial"].iloc[0]
-    for _, row in df.iterrows():
+    for i, row in df.iterrows():
         if row["stage"] != cur_s:
             cfg = STAGES.get(int(cur_s))
             ax.axvspan(start_t - 0.5, row["trial"] - 0.5,
                        alpha=CFG["stage_alpha"],
                        color=cfg.color if cfg else "w", zorder=0, lw=0)
-            ax.text((start_t + row["trial"]) / 2, 1.02, f"S{int(cur_s)}",
+            ax.text((start_t + row["trial"]) / 2, 1.02,
+                    _stage_label(cur_s, df.iloc[start_i:i]),
                     ha="center", fontsize=CFG["fs"],
                     transform=ax.get_xaxis_transform())
-            start_t, cur_s = row["trial"], row["stage"]
+            start_i, start_t, cur_s = i, row["trial"], row["stage"]
     cfg = STAGES.get(int(cur_s))
     ax.axvspan(start_t - 0.5, df["trial"].iloc[-1] + 0.5,
                alpha=CFG["stage_alpha"],
                color=cfg.color if cfg else "w", zorder=0, lw=0)
+    ax.text((start_t + df["trial"].iloc[-1]) / 2, 1.02,
+            _stage_label(cur_s, df.iloc[start_i:]),
+            ha="center", fontsize=CFG["fs"],
+            transform=ax.get_xaxis_transform())
 
 
 def mark_checkpoints(ax, df, y_frac=0.95):

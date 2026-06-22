@@ -85,6 +85,11 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.checkpoint_floor = 0.0
         self.settings.s0_valid_sessions = 0
         self.settings.s0_required_sessions = 2
+        # Stage 0 now has two steps: first with ROI proximity triggers (the
+        # animal gets reward by entering the port ROI), then poke-only. Each
+        # step needs s0_required_sessions good sessions. proximity_trigger
+        # flips to False between the two steps (see update_training_settings).
+        self.settings.proximity_trigger = True
 
         # Difficulty parameters (m^-1 scale for stage 2)
         #      correct +Δ     v_____________
@@ -167,6 +172,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.light_intensity_low = 50
 
     def update_training_settings(self) -> None:
+        """Run between sessions to advance stage / step."""
         df_task = self.df[self.df["task"] == "TowersTask"]
 
         # Scale refractory period linearly with previous session duration:
@@ -185,24 +191,57 @@ class TrainingProtocol(TrainingProtocolBase):
             return
 
         if self.settings.stage == 0:
-            # Advance after 2 sessions with >=40 trials AND >=90% completion.
-            # trial_correct is NaN on timeouts; notna().mean() = completion %
+            # Stage 0 has two steps (proximity ROIs or poke-only). A session
+            # is good with >=40 trials AND >=90% completion. trial_correct is
+            # NaN on timeouts; notna().mean() = completion % (it's 100%
+            # because we don't have timeouts in stage 0 anyway).
+
+            # s0_valid_sessions tracks good sessions in the current step
+            # (ROI or poke) and reaching s0_required_sessions ends that step,
+            # meaning that we have s0_required_sessions * 2 for this stage:
+            #     ROI step:  0, 1, 2  -> flip to poke (so 2 == 0 of poke step)
+            #     poke step: 0, 1, 2  -> advance to stage 1
+            # i.e. the "2" of ROI step and the "0" of poke are the same moment.
+
             def _ok(s):
                 df_s = df_task[df_task["session"] == s]
                 return (len(df_s) >= 40
                         and df_s["trial_correct"].notna().mean() >= 0.90)
 
-            all_sessions = sorted(df_task["session"].unique())
-            n_valid = int(sum(_ok(s) for s in all_sessions))
-            self.settings.s0_valid_sessions = n_valid
+            def _prox(s):
+                """Proximity mode that session ran under (True for legacy)."""
+                if "proximity_trigger" not in df_task.columns:
+                    return True
+                vals = df_task[df_task["session"] == s][
+                    "proximity_trigger"].dropna()
+                return bool(vals.iloc[-1]) if not vals.empty else True
 
+            def _step_sessions(mode):
+                """Sessions run in the given proximity step."""
+                return [s for s in sorted(df_task["session"].unique())
+                        if _prox(s) == mode]
+
+            prox = bool(getattr(self.settings, "proximity_trigger", True))
+            step_sessions = _step_sessions(prox)
             n_req = int(self.settings.s0_required_sessions)
-            recent = all_sessions[-n_req:]
+            recent = step_sessions[-n_req:]
             if len(recent) == n_req and all(_ok(s) for s in recent):
-                self.settings.stage = 1
-                self.settings.checkpoint = 1
-                self.settings.checkpoint_floor = 0.0
-                print("   * [TrainingProtocol] Stage 0 -> 1")
+                if prox:
+                    # 1st step done: flip ROI triggers so poke is now required
+                    self.settings.proximity_trigger = False
+                    prox = False
+                    print("   * [TrainingProtocol] Stage 0: proximity -> poke")
+                else:
+                    # 2nd step done: advance to stage 1, reset checkpoint/floor
+                    self.settings.stage = 1
+                    self.settings.checkpoint = 1
+                    self.settings.checkpoint_floor = 0.0
+                    print("   * [TrainingProtocol] Stage 0 -> 1")
+
+            # Per-step count: after a flip this recomputes for the poke step
+            # (no poke sessions yet -> 0), so no explicit reset needed.
+            self.settings.s0_valid_sessions = int(
+                sum(_ok(s) for s in _step_sessions(prox)))
         else:
             if self.last_task != "TowersTask":
                 return
@@ -244,6 +283,7 @@ class TrainingProtocol(TrainingProtocolBase):
                 "checkpoint",
                 "checkpoint_floor",
                 "s0_required_sessions",
+                "proximity_trigger",
                 "resume_from_last",
             ],
             "Staircase": [

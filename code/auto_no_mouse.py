@@ -318,6 +318,7 @@ class AutoNoMouse(AutoNoMouseBase):
             "give_free_reward": int(task.give_free_reward),
             "rescue": int(task._odc.rescue_active),
             "delta_towers": delta_towers,
+            "proximity_trigger": int(getattr(s, "proximity_trigger", True)),
             "step_delta": 0.0,
             "step_boost": 1.0,
         }
