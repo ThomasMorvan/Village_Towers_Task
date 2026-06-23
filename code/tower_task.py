@@ -214,6 +214,18 @@ class TowersTask(TowersTaskBase):
         self.settings.response_time = 60
 
         self._odc.start(self.settings)
+
+        # Reflip camera to remove the Areas2/3/4 from the stages that are not
+        # stage0 step1 (proximity-reward ROIs for left/right ports).
+        # Need to do that later because stage/step not known in init.
+        roi_step = (self._odc.stage == 0
+                    and getattr(self.settings, "proximity_trigger", True))
+        if not roi_step:
+            settings.set("USAGE2_BOX", "OFF")
+            settings.set("USAGE3_BOX", "OFF")
+            settings.set("USAGE4_BOX", "OFF")
+            self.cam_box.change = True
+
         self._reward_policy = RewardPolicy.from_settings(self.settings)
         self.led_picker = LedPicker(
             rwd_density=0.0, no_rwd_density=0.0,

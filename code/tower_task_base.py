@@ -212,6 +212,10 @@ class TowersTaskBase(TaskBase):
     def start(self):
         # A start() that all subclasses of TowersTask will do
         self.reload_softcode()
+        # set_ui_settings() (in __init__) wrote fresh ROIs/usages to QSettings,
+        # but to take effect, need to flip the running camera
+        # after it is attached in init.
+        self.cam_box.change = True
 
     def after_trial(self):
         pass
