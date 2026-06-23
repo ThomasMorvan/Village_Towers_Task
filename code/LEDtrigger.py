@@ -34,6 +34,11 @@ class LEDTrigger(CameraTriggerBase):
                     and getattr(self.task.settings,
                                 "proximity_trigger", True)):
                 sma = self.task.bpod.sma
+                # current_state is NaN (float) once the trial's SMA finishes
+                if not isinstance(sma.current_state, int):
+                    print("[LEDTrigger] wrong state type:", sma.current_state,
+                          type(sma.current_state))
+                    return
                 state = sma.state_names[sma.current_state]
                 if state == "WAIT FOR CHOICE POKE":
                     if cam.area2_is_triggered:
