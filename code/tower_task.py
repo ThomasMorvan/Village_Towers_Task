@@ -592,6 +592,9 @@ class TowersTask(TowersTaskBase):
         log.info(f"Trial: side={self.current_trial_rwd_side.value}, "
                  f"correct={self.is_trial_correct}")
 
+        # Reset trial state for next trial
+        self.led_strip.clear_strip()
+        self.led_strip.update_strip(sleep_duration=None)
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []

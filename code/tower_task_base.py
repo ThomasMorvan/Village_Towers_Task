@@ -55,7 +55,7 @@ class LEDPosition:
 
 
 class TowersTaskBase(TaskBase):
-    SOFTCODE_LED_OFF: int = 0
+    SOFTCODE_LED_OFF: int = 10
     SOFTCODE_CAMERA_ACCEPT: int = 1
     SOFTCODE_CAMERA_REFUSE: int = 2
     SOFTCODE_LED_ON_CAPTURE: int = 4

@@ -3,7 +3,8 @@ from village.custom_classes.direct_functions_base import DirectFunctionsBase
 
 
 class DirectFunctions(DirectFunctionsBase):
-    def function0(self):
+    def function10(self):
+        """Turn off all LEDs (SOFTCODE_LED_OFF)."""
         self._clear_strip()
 
     def function1(self):
