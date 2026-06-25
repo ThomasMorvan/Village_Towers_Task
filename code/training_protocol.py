@@ -76,7 +76,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.next_task = "TowersTask"
         self.settings.refractory_period = 3600 * 4  # default, will be updated
         self.settings.max_refractory = 3600 * 4
-        self.settings.minimum_duration = 600
+        self.settings.minimum_duration = 1800
         self.settings.maximum_duration = 3600
 
         # Stage and checkpoint tracking
@@ -177,7 +177,7 @@ class TrainingProtocol(TrainingProtocolBase):
 
         # Scale refractory period linearly with previous session duration:
         # a session of maximum_duration (1h) maps to max_refractory (cap at 4h)
-        # a short session (minimum_duration 10min) maps to 40 min.
+        # a short session (minimum_duration 30min) maps to 120 min.
         if not df_task.empty:
             last = df_task[df_task["session"] == df_task["session"].max()]
             time_in_task = last["TRIAL_END"].max() - last["TRIAL_START"].min()
