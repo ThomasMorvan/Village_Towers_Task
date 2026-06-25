@@ -1,3 +1,4 @@
+import getpass
 import subprocess
 import traceback
 
@@ -42,15 +43,22 @@ class IsThereAMouseInside(TelegramCommandBase):
 
 
 class GiveIp(TelegramCommandBase):
-    """/give_ip -> the LAN IP(s) of the Raspberry Pi."""
+    """/give_ip -> get user and ip of Raspberry Pi."""
 
     command = "give_ip"
 
     async def handler(self, update: Update,
                       context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
-            ip = subprocess.check_output(["hostname", "-I"], text=True).strip()
-            await update.message.reply_text(ip or "no IP found")
+            ips = subprocess.check_output(["hostname", "-I"], text=True).split()
+            if not ips:
+                await update.message.reply_text("no IP found")
+                return
+            user = getpass.getuser()
+            cmd = f"{user}@{ips[0]}"
+            if len(ips) > 1:
+                cmd += "\n(other IPs: " + ", ".join(ips[1:]) + ")"
+            await update.message.reply_text(cmd)
         except Exception:
             log.error("Telegram give_ip", exception=traceback.format_exc())
 
