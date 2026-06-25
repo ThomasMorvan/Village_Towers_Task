@@ -553,11 +553,12 @@ def plot_lr_bars(df, ax):
     ax.legend(fontsize=CFG["fs"], loc="upper right")
 
 
-def _advance_criteria(df, window):
-    """Diagnostic advance criteria"""
+def _advance_criteria(df, window, settings=None):
+    """Diagnostic advance criteria."""
     cur = int(df["stage"].iloc[-1])
     cfg = STAGES.get(cur)
     phase = df["phase"].iloc[-1] if "phase" in df.columns else "main"
+    step = cfg.staircase.grad_tol(settings) if cfg is not None else 0.0
 
     # contiguous block of the current stage
     chg = (df["stage"] != df["stage"].shift()).cumsum()
@@ -580,50 +581,54 @@ def _advance_criteria(df, window):
         seg_w = seg[seg["phase"] == "warmup"]
         wn = int(last("warmup_trial", len(seg_w)))
         rows = [
-            ("Warmup trials", wn, cfg.warmup_min_trials or 0, 0, False, "int"),
+            ("Warmup trials", wn, cfg.warmup_min_trials or 0, 0, False,
+             "int", 0.0),
             ("Warmup acc", acc_of(seg_w), cfg.warmup_acc_threshold or 0.0,
-             0.0, False, "pct"),
+             0.0, False, "pct", 0.0),
             ("Warmup bias", bias_of(seg_w),
-             cfg.warmup_bias_threshold or BIAS_TARGET, 0.5, True, "pct"),
+             cfg.warmup_bias_threshold or BIAS_TARGET, 0.5, True, "pct", 0.0),
         ]
         return f"S{cur} warmup → enter main", rows
 
     if cur == 0:
-        rows = [("Trials", len(df), 40, 0, False, "int")]
+        rows = [("Trials", len(df), 40, 0, False, "int", 0.0)]
     elif cur == 1:
         empr = last("empR")
         bias = abs(empr - 0.5) if not np.isnan(empr) and empr >= 0 \
             else bias_of(seg)
         rows = [
-            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False, "pct"),
-            ("Bias", bias, BIAS_TARGET, 0.5, True, "pct"),
+            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
+             "pct", 0.0),
+            ("Bias", bias, BIAS_TARGET, 0.5, True, "pct", 0.0),
             ("Cue intensity", last("light_intensity"), cfg.staircase.target,
-             cfg.staircase.start, True, "int"),
+             cfg.staircase.start, True, "int", step),
         ]
     elif cur in (2, 4):
         rows = [
-            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False, "pct"),
+            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
+             "pct", 0.0),
             ("mu_nr", last("mu_nr"), cfg.staircase.target,
-             cfg.staircase.start, False, "f2"),
+             cfg.staircase.start, False, "f4", step),
         ]
     elif cur == 3:
         rows = [
-            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False, "pct"),
+            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
+             "pct", 0.0),
             ("LED ms", last("led_ms"), cfg.staircase.target,
-             cfg.staircase.start, True, "int"),
+             cfg.staircase.start, True, "int", step),
         ]
     name = cfg.name if cfg else "?"
     return f"S{cur} {name} → advance", rows
 
 
-def plot_stage_diagnostic(df, ax, window=40):
+def plot_stage_diagnostic(df, ax, window=40, settings=None):
     """Offline view of the HUD advance criteria for the current stage:
     one bar per criterion (progress start→target), green if met else red."""
     if df.empty or "stage" not in df.columns:
         ax.text(0.5, 0.5, "No stage data", ha="center", va="center",
                 transform=ax.transAxes)
         return
-    title, rows = _advance_criteria(df, window)
+    title, rows = _advance_criteria(df, window, settings)
     ax.set_title(title, fontsize=CFG["fs_label"])
     if not rows:
         ax.text(0.5, 0.5, "Final stage\nnothing to advance", ha="center",
@@ -635,12 +640,13 @@ def plot_stage_diagnostic(df, ax, window=40):
         if v is None or (isinstance(v, float) and np.isnan(v)):
             return "?"
         return {"pct": f"{v * 100:.0f}%", "int": f"{v:.0f}",
-                "f2": f"{v:.2f}"}.get(kind, str(v))
+                "f4": f"{v:.4f}"}.get(kind, str(v))
 
     names = []
-    for i, (name, val, target, start, lower, kind) in enumerate(rows):
+    for i, (name, val, target, start, lower, kind, tol) in enumerate(rows):
         nan = isinstance(val, float) and np.isnan(val)
-        met = (not nan) and ((val <= target) if lower else (val >= target))
+        met = (not nan) and ((val <= target + tol) if lower
+                             else (val >= target - tol))
         if nan or start == target:
             prog = 1.0 if met else 0.0
         else:

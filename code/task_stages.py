@@ -71,6 +71,21 @@ class Staircase:
         base = (delta_up if correct else delta_down) * (r ** (n - 1))
         return min(base * boost_mult, delta_max), new_rl, boost_mult
 
+    def grad_tol(self, settings=None, size=None) -> float:
+        """Graduation tolerance for this staircase's variable, as size of
+        up-steps. The variable is clamped at target and oscillates against it,
+        so accept advancement within size steps. size=None reads
+        settings.graduation_tol_steps (default 1). settings=None uses default
+        step sizes (for offline plotting without the live settings)."""
+        name, default = {
+            "tower_duration":  ("staircase_delta_up_ms", 10.0),
+            "light_intensity": ("staircase_delta_up_intensity", 5.0),
+        }.get(self.variable, ("staircase_delta_up", 0.0025))
+        step = float(getattr(settings, name, default))
+        if size is None:
+            size = float(getattr(settings, "graduation_tol_steps", 1.0))
+        return size * step
+
 
 @dataclass(frozen=True)
 class StageConfig:

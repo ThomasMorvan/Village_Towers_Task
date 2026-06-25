@@ -312,9 +312,10 @@ class OnlineDifficultyController:
                 and self.stage == 1
                 and getattr(settings, "stage", 0) <= MAX_STAGE):
             rolling_acc = sum(self._perf_window) / len(self._perf_window)
+            tol = self.config.staircase.grad_tol(settings)
             if (rolling_acc >= self.config.advance_threshold and bias <= 0.10
                     and self.difficulty.light_intensity
-                    <= self.config.staircase.target):
+                    <= self.config.staircase.target + tol):
                 return self._pass_checkpoint(to_stage=2, settings=settings)
         return AdaptationEvent()
 
@@ -358,20 +359,21 @@ class OnlineDifficultyController:
 
         rolling_acc = sum(self._perf_window) / len(self._perf_window)
         cfg = self.config
+        tol = cfg.staircase.grad_tol(settings)
 
         if (self.stage == 2
                 and rolling_acc >= cfg.advance_threshold
-                and self.difficulty.mu_nr >= cfg.staircase.target):
+                and self.difficulty.mu_nr >= cfg.staircase.target - tol):
             return self._pass_checkpoint(to_stage=3, settings=settings)
 
         if (self.stage == 3
                 and rolling_acc >= cfg.advance_threshold
-                and self.difficulty.led_ms <= settings.min_tower_duration):
+                and self.difficulty.led_ms <= settings.min_tower_duration + tol):
             return self._pass_checkpoint(to_stage=4, settings=settings)
 
         if (self.stage == 4
                 and rolling_acc >= cfg.advance_threshold
-                and self.difficulty.mu_nr >= cfg.staircase.target):
+                and self.difficulty.mu_nr >= cfg.staircase.target - tol):
             return self._pass_checkpoint(to_stage=5, settings=settings)
 
         return AdaptationEvent()

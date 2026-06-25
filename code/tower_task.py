@@ -95,26 +95,30 @@ class TowersTask(TowersTaskBase):
             adv_label = [step_lbl, trials_lbl, sessions_lbl]
 
         elif stage == 1:
+            tol = cfg.staircase.grad_tol(self.settings)
             bias = abs(self.left_or_right.current_empR - 0.5)
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             bias_lbl = ("Bias:", f" {bias*100:.0f}/10%", bias*100 <= 10)
             cue = self._odc.difficulty.light_intensity
             cue_lbl = ("Cue:", f" {cue}/{cfg.staircase.target}",
-                       cue <= cfg.staircase.target)
+                       cue <= cfg.staircase.target + tol)
             adv_label = [acc_lbl, bias_lbl, cue_lbl]
         elif stage in (2, 4):
+            tol = cfg.staircase.grad_tol(self.settings)
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
-            mu_nr_lbl = ("mu_nr:", (f" {self._odc.difficulty.mu_nr:.2f}/"
-                                    f"{cfg.staircase.target:.1f}"),
-                         self._odc.difficulty.mu_nr >= cfg.staircase.target)
+            mu_nr_lbl = ("mu_nr:", (f" {self._odc.difficulty.mu_nr:.3f}/"
+                                    f"{cfg.staircase.target:.2f}"),
+                         self._odc.difficulty.mu_nr
+                         >= cfg.staircase.target - tol)
             adv_label = [acc_lbl, mu_nr_lbl]
         elif stage == 3:
+            tol = cfg.staircase.grad_tol(self.settings)
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             led_ms_lbl = ("LED ms:", (f" {self._odc.difficulty.led_ms:.0f}/"
                                       f"{self.settings.min_tower_duration:.0f}"
                                       ),
                           (self._odc.difficulty.led_ms <=
-                          self.settings.min_tower_duration))
+                          self.settings.min_tower_duration + tol))
             adv_label = [acc_lbl, led_ms_lbl]
         elif stage == 5:
             adv_label = [("", "  Final stage", True)]

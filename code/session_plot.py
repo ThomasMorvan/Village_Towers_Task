@@ -88,4 +88,4 @@ class SessionPlot(SessionPlotBase):
         ax.clear()
         s = getattr(self, "settings", None)
         window = int(getattr(s, "acc_window", 40))
-        plot_stage_diagnostic(df, ax, window=window)
+        plot_stage_diagnostic(df, ax, window=window, settings=s)
