@@ -5,7 +5,8 @@ from village.custom_classes.session_plot_base import SessionPlotBase
 from task_stages import REQUIRED_COLS
 from plot_utils import (shade_phases, shade_stages, mark_checkpoints,
                         plot_staircase, plot_rolling_accuracy,
-                        plot_psychometric, shade_rescue)
+                        plot_psychometric, plot_lr_bars, shade_rescue,
+                        to_time_axis)
 
 
 class SessionPlot(SessionPlotBase):
@@ -26,18 +27,24 @@ class SessionPlot(SessionPlotBase):
                     ha="center", va="center", transform=ax.transAxes)
             return fig
 
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(width, height),
-                                            gridspec_kw={"height_ratios":
-                                                         [2, 2, 1.5]})
+        # Space trial-axis plots by real time within the session.
+        df, self._xlabel = to_time_axis(df)
+
+        fig, (ax1, ax2, ax3, ax4) = plt.subplots(
+            4, 1, figsize=(width, height),
+            gridspec_kw={"height_ratios": [2, 2, 1.5, 1.5]})
         for ax, fn in ((ax1, self._plot_staircase),
                        (ax2, self._plot_rolling_accuracy),
-                       (ax3, self._plot_psychometric)):
+                       (ax3, self._plot_psychometric),
+                       (ax4, self._plot_lr_bars)):
             try:
                 fn(df, ax)
             except Exception as e:
                 ax.text(0.5, 0.5, f"Plot error:\n{e}", ha="center",
                         va="center", transform=ax.transAxes, fontsize=7,
                         color="red")
+        ax1.set_xlabel(self._xlabel)
+        ax2.set_xlabel(self._xlabel)
         fig.tight_layout()
         return fig
 
@@ -65,3 +72,7 @@ class SessionPlot(SessionPlotBase):
     def _plot_psychometric(self, df, ax):
         ax.clear()
         plot_psychometric(df, ax)
+
+    def _plot_lr_bars(self, df, ax):
+        ax.clear()
+        plot_lr_bars(df, ax)

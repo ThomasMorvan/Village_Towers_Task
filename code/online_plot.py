@@ -5,7 +5,7 @@ from village.manager import manager
 from task_stages import REQUIRED_COLS
 from plot_utils import (shade_phases, shade_stages, mark_checkpoints,
                         plot_staircase, plot_rolling_accuracy,
-                        plot_streak, plot_step, shade_rescue)
+                        plot_streak, plot_step, shade_rescue, to_time_axis)
 
 
 class Online_Plot(OnlinePlotBase):
@@ -66,12 +66,16 @@ class Online_Plot(OnlinePlotBase):
                 self._error_plot(ax, "Waiting for data...")
             return
 
-        for ax, fn in ((self.ax1, self._plot_staircase),
-                       (self.ax2, self._plot_rolling_accuracy),
-                       (self.ax3, self._plot_streak),
-                       (self.ax4, self._plot_step)):
+        # Staircase/accuracy spaced by time; streak/step keep the trial index.
+        df_t, xlabel = to_time_axis(df)
+        for ax, fn, d, xl in ((self.ax1, self._plot_staircase, df_t, xlabel),
+                              (self.ax2, self._plot_rolling_accuracy,
+                               df_t, xlabel),
+                              (self.ax3, self._plot_streak, df, "Trial"),
+                              (self.ax4, self._plot_step, df, "Trial")):
             try:
-                fn(df, ax)
+                fn(d, ax)
+                ax.set_xlabel(xl)
             except Exception as e:
                 self._error_plot(ax, str(e))
 

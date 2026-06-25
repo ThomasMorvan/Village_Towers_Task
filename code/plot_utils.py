@@ -41,6 +41,7 @@ CFG = {
     "thr_alpha":         0.7,
     "acc_ylim":          (-0.05, 1.1),
     "reward_color":      "darkgoldenrod",
+    "bias_color":        "purple",
 
     # streak
     "streak_ok":         "forestgreen",
@@ -74,6 +75,48 @@ CFG = {
 }
 
 
+# bias target is the same across stages
+BIAS_TARGET = 0.10
+
+
+def animal_bias(df, window):
+    """Rolling side bias of the animal: |acc_right - acc_left| over the last
+    `window` trials, matching WarmupTracker.bias in the difficulty
+    controller. NaN until at least one trial of each side is in the window."""
+    side_r = df["trial_side"] == "R"
+    corr = df["trial_correct"].astype(float)
+
+    def _acc(mask):
+        c = (corr * mask).rolling(window, min_periods=1).sum()
+        n = mask.astype(float).rolling(window, min_periods=1).sum()
+        return c / n.replace(0, np.nan)
+
+    return (_acc(side_r) - _acc(~side_r)).abs()
+
+
+def to_time_axis(df):
+    """Replace the trial index with minutes since session start so trial-axis
+    plots are spaced by real time. Returns (df, xlabel). Falls back to the
+    trial index when no usable TRIAL_START timestamps are present."""
+    df = df.reset_index(drop=True)
+    if "TRIAL_START" in df.columns and df["TRIAL_START"].notna().any():
+        ts = df["TRIAL_START"].ffill().bfill()
+        return (df.assign(trial=(ts - ts.iloc[0]) / 60.0),
+                "Time in session (min)")
+    return df, "Trial"
+
+
+def _dx(x):
+    """Typical spacing between adjacent x positions (1.0 for a trial index;
+    median gap when x is time, so shading/bars stay sized to real spacing)."""
+    x = np.asarray(x, dtype=float)
+    if x.size < 2:
+        return 1.0
+    d = np.diff(np.sort(np.unique(x)))
+    d = d[d > 0]
+    return float(np.median(d)) if d.size else 1.0
+
+
 def shade_phases(ax, df):
     """warmup phase shade."""
     if "phase" not in df.columns:
@@ -81,17 +124,18 @@ def shade_phases(ax, df):
     df = df.reset_index(drop=True)
     trials = df["trial"].tolist()
     phases = df["phase"].tolist()
+    h = _dx(trials) / 2
     start, cur = trials[0], phases[0]
     for t, p in zip(trials[1:], phases[1:]):
         if p != cur:
             if cur == "warmup":
-                ax.axvspan(start - 0.5, t - 0.5,
+                ax.axvspan(start - h, t - h,
                            alpha=CFG["warmup_alpha"],
                            color=CFG["warmup_color"], zorder=0,
                            lw=0)
             start, cur = t, p
     if cur == "warmup":
-        ax.axvspan(start - 0.5, trials[-1] + 0.5,
+        ax.axvspan(start - h, trials[-1] + h,
                    alpha=CFG["warmup_alpha"],
                    color=CFG["warmup_color"], zorder=0,
                    lw=0)
@@ -103,18 +147,19 @@ def shade_rescue(ax, df):
         return
     trials = df["trial"].tolist()
     rescues = df["rescue"].fillna(0).astype(int).tolist()
+    h = _dx(trials) / 2
     in_block = False
     for t, r in zip(trials, rescues):
         if r and not in_block:
             start = t
             in_block = True
         elif not r and in_block:
-            ax.axvspan(start - 0.5, t - 0.5,
+            ax.axvspan(start - h, t - h,
                        color=CFG["rescue_color"], alpha=CFG["rescue_alpha"],
                        zorder=1, lw=0, label="Rescue")
             in_block = False
     if in_block:
-        ax.axvspan(start - 0.5, trials[-1] + 0.5,
+        ax.axvspan(start - h, trials[-1] + h,
                    color=CFG["rescue_color"], alpha=CFG["rescue_alpha"],
                    zorder=1, lw=0, label="Rescue")
 
@@ -132,13 +177,14 @@ def _stage_label(stage, df_seg):
 def shade_stages(ax, df):
     """Background color for each stage."""
     df = df.reset_index(drop=True)
+    h = _dx(df["trial"]) / 2
     cur_s = df["stage"].iloc[0]
     start_i = 0
     start_t = df["trial"].iloc[0]
     for i, row in df.iterrows():
         if row["stage"] != cur_s:
             cfg = STAGES.get(int(cur_s))
-            ax.axvspan(start_t - 0.5, row["trial"] - 0.5,
+            ax.axvspan(start_t - h, row["trial"] - h,
                        alpha=CFG["stage_alpha"],
                        color=cfg.color if cfg else "w", zorder=0, lw=0)
             ax.text((start_t + row["trial"]) / 2, 1.02,
@@ -147,7 +193,7 @@ def shade_stages(ax, df):
                     transform=ax.get_xaxis_transform())
             start_i, start_t, cur_s = i, row["trial"], row["stage"]
     cfg = STAGES.get(int(cur_s))
-    ax.axvspan(start_t - 0.5, df["trial"].iloc[-1] + 0.5,
+    ax.axvspan(start_t - h, df["trial"].iloc[-1] + h,
                alpha=CFG["stage_alpha"],
                color=cfg.color if cfg else "w", zorder=0, lw=0)
     ax.text((start_t + df["trial"].iloc[-1]) / 2, 1.02,
@@ -289,6 +335,14 @@ def plot_rolling_accuracy(df, ax, window: int = 100):
     ax.plot(df["trial"], rolling, color=CFG["acc_color"], lw=CFG["acc_lw"],
             label=f"Rolling accuracy ({window} trials)", zorder=2)
 
+    if "trial_side" in df.columns:
+        bias = animal_bias(df, window)
+        ax.plot(df["trial"], bias, color=CFG["bias_color"], lw=CFG["acc_lw"],
+                alpha=0.8, label="Animal bias |accR-accL|", zorder=2)
+        ax.axhline(BIAS_TARGET, color=CFG["bias_color"], ls=":",
+                   lw=CFG["thr_lw"], alpha=CFG["thr_alpha"],
+                   label=f"Target bias ({BIAS_TARGET})")
+
     if "stage" in df.columns and len(df):
         stages = df["stage"].astype(int).to_numpy()
 
@@ -386,7 +440,7 @@ def plot_streak(df, ax):
     ax.legend(fontsize=CFG["fs"], loc="upper left")
 
 
-def _step_bars(ax, sub_df, boost_series, ok_color, err_color):
+def _step_bars(ax, sub_df, boost_series, ok_color, err_color, width=1.0):
     """Draw the boost as stacked step bars:
         base (correct/incorrect) + gold boost top."""
     if sub_df.empty:
@@ -397,14 +451,14 @@ def _step_bars(ax, sub_df, boost_series, ok_color, err_color):
     ok = sub_df["trial_correct"].astype(bool)
     ax.bar(sub_df.loc[ok,  "trial"], base[ok],
            color=ok_color,  alpha=CFG["streak_alpha"],
-           width=1, label="correct")
+           width=width, label="correct")
     ax.bar(sub_df.loc[~ok, "trial"], base[~ok],
            color=err_color, alpha=CFG["streak_alpha"],
-           width=1, label="incorrect")
+           width=width, label="incorrect")
     boosted = extra > 1e-9
     if boosted.any():
         ax.bar(sub_df.loc[boosted, "trial"], extra[boosted],
-               bottom=base[boosted], color="gold", alpha=0.7, width=1,
+               bottom=base[boosted], color="gold", alpha=0.7, width=width,
                label="boost")
 
 
@@ -427,18 +481,29 @@ def plot_step(df, ax, twin_ax=None):
     ax2.yaxis.tick_right()
     ax2.yaxis.set_label_position("right")
 
+    w = _dx(df["trial"])
     boost = df["step_boost"] if "step_boost" in df.columns else None
     df_dens = df[df["stage"].isin([2, 4])] if "stage" in df.columns else df
     _step_bars(ax, df_dens,
                boost if boost is not None else df_dens["step_delta"],
-               CFG["streak_ok"], CFG["streak_err"])
+               CFG["streak_ok"], CFG["streak_err"], width=w)
 
     df_ms = df[df["stage"] == 3] if "stage" in df.columns else pd.DataFrame()
     _step_bars(ax2, df_ms,
                (boost if boost is not None
                 else df_ms["step_delta"] if not df_ms.empty
                 else pd.Series(dtype=float)),
-               CFG["led_color"], "darkorange")
+               CFG["led_color"], "darkorange", width=w)
+
+    df_cue = df[df["stage"] == 1] if "stage" in df.columns else pd.DataFrame()
+    if not df_cue.empty:
+        ax3 = ax.twinx()
+        ax3.spines["right"].set_position(("axes", 1.10))
+        _step_bars(ax3, df_cue,
+                   boost if boost is not None else df_cue["step_delta"],
+                   STAGES[1].color, "darkgreen", width=w)
+        ax3.set_ylabel("Δ cue intensity (PWM)", color=STAGES[1].color)
+        ax3.tick_params(axis="y", labelcolor=STAGES[1].color)
 
     ax.set_ylabel("Step size", color=CFG["mu_nr_color"])
     ax2.set_ylabel("Δ led_ms (ms)", color=CFG["led_color"])
@@ -455,6 +520,36 @@ def plot_step(df, ax, twin_ax=None):
             labels.append(lbl)
     ax.legend(lines, labels, fontsize=CFG["fs"], loc="upper left")
     return ax2
+
+
+def plot_lr_bars(df, ax):
+    """Correct / incorrect trial counts per rewarded side (L vs R)."""
+    if "trial_side" not in df.columns:
+        ax.text(0.5, 0.5, "No trial_side data", ha="center", va="center",
+                transform=ax.transAxes)
+        return
+    d = df.dropna(subset=["trial_side", "trial_correct"])
+    if d.empty:
+        ax.text(0.5, 0.5, "No trial data", ha="center", va="center",
+                transform=ax.transAxes)
+        return
+    ok = d["trial_correct"].astype(bool)
+    sides = ["L", "R"]
+    correct = [int(((d["trial_side"] == s) & ok).sum()) for s in sides]
+    incorrect = [int(((d["trial_side"] == s) & ~ok).sum()) for s in sides]
+    x = np.arange(len(sides))
+    w = 0.38
+    bars = [(x - w / 2, correct, CFG["streak_ok"], "correct"),
+            (x + w / 2, incorrect, CFG["streak_err"], "incorrect")]
+    for xs, vals, color, label in bars:
+        ax.bar(xs, vals, w, color=color, alpha=0.7, label=label)
+        for xi, v in zip(xs, vals):
+            ax.text(xi, v, str(v), ha="center", va="bottom",
+                    fontsize=CFG["fs"])
+    ax.set_xticks(x)
+    ax.set_xticklabels(["Left", "Right"])
+    ax.set_ylabel("Trials")
+    ax.legend(fontsize=CFG["fs"], loc="upper right")
 
 
 def plot_psychometric(df, ax):
@@ -565,9 +660,9 @@ def plot_difficulty_progression(df, ax):
               loc="upper left")
 
 
-if __name__ == "__main__":
-    rng = np.random.default_rng(42)
-    n = 300
+def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
+    """Synthetic session df covering stages 0-5."""
+    rng = np.random.default_rng(seed)
 
     stage_arr = np.zeros(n, dtype=int)
     stage_arr[50:130] = 1
@@ -600,63 +695,111 @@ if __name__ == "__main__":
     rescue_arr[288:298] = 1
     session_arr = np.searchsorted([60, 120, 180, 240], np.arange(n)) + 1
 
+    # Trial timestamps: 2-8 s apart, with a couple of longer pauses, so the
+    # time-spaced x-axis differs visibly from the trial index.
+    gaps = rng.uniform(2.0, 8.0, n)
+    gaps[100] += 120.0
+    gaps[220] += 240.0
+    trial_start = 1.7e9 + np.cumsum(gaps)
+
     correct_arr = rng.integers(0, 2, n)
     step_delta_arr = np.zeros(n)
     step_boost_arr = np.ones(n)
     _M, _tau, _nb = 4.0, 10.0, 30
-    for _s in [2, 3, 4]:
+    _base_by_stage = {1: 15.0, 2: 0.005, 3: 30.0, 4: 0.005}
+    for _s in [1, 2, 3, 4]:
         _mask = (stage_arr == _s) & (np.array(phase_arr) == "main")
         if _mask.any():
             _t = np.arange(1, _mask.sum() + 1)
             step_boost_arr[_mask] = np.where(
                 _t <= _nb, _M * np.exp(-_t / _tau) + 1.0, 1.0)
-            _base = 30.0 if _s == 3 else 0.005
+            _base = _base_by_stage[_s]
             step_delta_arr[_mask] = np.abs(
                 rng.normal(_base, _base * 0.3, _mask.sum()))
 
-    df = pd.DataFrame({"trial":            np.arange(n),
-                       "session":          session_arr,
-                       "stage":            stage_arr,
-                       "phase":            phase_arr,
-                       "trial_correct":    correct_arr,
-                       "mu_r":             mu_r,
-                       "mu_nr":            mu_nr,
-                       "led_ms":           led_ms,
-                       "streak":           rng.integers(-5, 6, n),
-                       "step_delta":       step_delta_arr,
-                       "step_boost":       step_boost_arr,
-                       "checkpoint":       checkpoint_arr,
-                       "checkpoint_floor": floor_arr,
-                       "delta_towers":     rng.integers(-4, 5, n),
-                       "rescue":           rescue_arr})
+    dates = pd.to_datetime("2026-01-01") + pd.to_timedelta(session_arr - 1,
+                                                           unit="D")
+    return pd.DataFrame({"trial":            np.arange(n),
+                         "date":             dates,
+                         "session":          session_arr,
+                         "TRIAL_START":      trial_start,
+                         "stage":            stage_arr,
+                         "phase":            phase_arr,
+                         "trial_correct":    correct_arr,
+                         "mu_r":             mu_r,
+                         "mu_nr":            mu_nr,
+                         "led_ms":           led_ms,
+                         "streak":           rng.integers(-5, 6, n),
+                         "step_delta":       step_delta_arr,
+                         "step_boost":       step_boost_arr,
+                         "checkpoint":       checkpoint_arr,
+                         "checkpoint_floor": floor_arr,
+                         "delta_towers":     rng.integers(-4, 5, n),
+                         "trial_side":       np.where(rng.random(n) < 0.5,
+                                                      "L", "R"),
+                         "rescue":           rescue_arr})
 
-    fig, axs = plt.subplots(8, 1, figsize=(13, 30))
 
-    shade_phases(axs[0], df)
-    plot_staircase(df, axs[0])
+def online_figure(df):
+    df_t, xlabel = to_time_axis(df)
+    fig, ((a1, a2), (a3, a4)) = plt.subplots(2, 2, figsize=(14, 8),
+                                             layout="constrained")
+    shade_stages(a1, df_t)
+    mark_checkpoints(a1, df_t)
+    shade_phases(a1, df_t)
+    plot_staircase(df_t, a1)
+    shade_stages(a2, df_t)
+    mark_checkpoints(a2, df_t)
+    shade_phases(a2, df_t)
+    shade_rescue(a2, df_t)
+    plot_rolling_accuracy(df_t, a2)
+    plot_streak(df, a3)
+    shade_stages(a4, df)
+    shade_phases(a4, df)
+    plot_step(df, a4)
+    a1.set_xlabel(xlabel)
+    a2.set_xlabel(xlabel)
+    a3.set_xlabel("Trial")
+    a4.set_xlabel("Trial")
+    fig.suptitle("Online plot")
+    return fig
 
-    shade_stages(axs[1], df)
-    mark_checkpoints(axs[1], df)
-    shade_phases(axs[1], df)
-    shade_rescue(axs[1], df)
-    plot_rolling_accuracy(df, axs[1])
 
-    plot_streak(df, axs[2])
+def session_figure(df):
+    df, xlabel = to_time_axis(df)
+    fig, (a1, a2, a3, a4) = plt.subplots(
+        4, 1, figsize=(11, 13),
+        gridspec_kw={"height_ratios": [2, 2, 1.5, 1.5]})
+    shade_stages(a1, df)
+    mark_checkpoints(a1, df)
+    shade_phases(a1, df)
+    plot_staircase(df, a1)
+    shade_stages(a2, df)
+    mark_checkpoints(a2, df)
+    shade_phases(a2, df)
+    shade_rescue(a2, df)
+    plot_rolling_accuracy(df, a2, window=40)
+    plot_psychometric(df, a3)
+    plot_lr_bars(df, a4)
+    a1.set_xlabel(xlabel)
+    a2.set_xlabel(xlabel)
+    fig.suptitle("Session plot")
+    fig.tight_layout()
+    return fig
 
-    shade_stages(axs[3], df)
-    shade_phases(axs[3], df)
-    plot_step(df, axs[3])
 
-    plot_psychometric(df, axs[4])
+def subject_figure(df):
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(11, 8))
+    plot_stage_progression(df, a1)
+    plot_difficulty_progression(df, a2)
+    fig.suptitle("Subject plot")
+    fig.tight_layout()
+    return fig
 
-    shade_stages(axs[5], df)
-    mark_checkpoints(axs[5], df)
-    shade_phases(axs[5], df)
-    plot_staircase(df, axs[5])
 
-    plot_stage_progression(df, axs[6])
-
-    plot_difficulty_progression(df, axs[7])
-
-    plt.tight_layout()
+if __name__ == "__main__":
+    df = demo_df()
+    online_figure(df)
+    session_figure(df)
+    subject_figure(df)
     plt.show()
