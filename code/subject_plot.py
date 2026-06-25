@@ -1,6 +1,7 @@
 import calplot
 import numpy as np
 import pandas as pd
+import matplotlib.dates as mdates
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
@@ -38,7 +39,10 @@ class SubjectPlot(SubjectPlotBase):
         axs[0].imshow(image)
         axs[0].axis("off")
 
-        dates_df.plot(kind="bar", ax=axs[1])
+        axs[1].bar(dates_df.index, dates_df.values, width=0.8)
+        loc = mdates.AutoDateLocator(maxticks=12)
+        axs[1].xaxis.set_major_locator(loc)
+        axs[1].xaxis.set_major_formatter(mdates.ConciseDateFormatter(loc))
         axs[1].set_ylabel("Number of trials")
         axs[1].set_xlabel("Date")
 

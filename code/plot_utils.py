@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import matplotlib.dates as mdates
 from matplotlib import pyplot as plt
 
 from task_stages import STAGES, CHECKPOINT_COLORS
@@ -788,8 +789,22 @@ def session_figure(df):
     return fig
 
 
+def plot_trials_per_day(df, ax):
+    """Trials per session date on a real date axis (auto-thinned ticks).
+    Mirrors the bar panel in SubjectPlot."""
+    counts = df["date"].value_counts(sort=False)
+    counts.index = pd.to_datetime(counts.index)
+    ax.bar(counts.index, counts.values, width=0.8)
+    loc = mdates.AutoDateLocator(maxticks=12)
+    ax.xaxis.set_major_locator(loc)
+    ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(loc))
+    ax.set_ylabel("Number of trials")
+    ax.set_xlabel("Date")
+
+
 def subject_figure(df):
-    fig, (a1, a2) = plt.subplots(2, 1, figsize=(11, 8))
+    fig, (a0, a1, a2) = plt.subplots(3, 1, figsize=(11, 11))
+    plot_trials_per_day(df, a0)
     plot_stage_progression(df, a1)
     plot_difficulty_progression(df, a2)
     fig.suptitle("Subject plot")
