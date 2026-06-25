@@ -140,7 +140,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.onset_boost_trials = 30  # main-phase trials boost
         self.settings.onset_boost_on_graduation = False  # boost at chkpt
         self.settings.staircase_delta_max = 0.025  # max step size
-        self.settings.graduation_tol_steps = 1.0
+        self.settings.graduation_tol_steps = 0  # disabled
 
         # Stage 3 staircase parameters (ms scale), same idea, but we go down
         self.settings.staircase_delta_up_ms = 10  # ms per correct
