@@ -553,6 +553,116 @@ def plot_lr_bars(df, ax):
     ax.legend(fontsize=CFG["fs"], loc="upper right")
 
 
+def _advance_criteria(df, window):
+    """Diagnostic advance criteria"""
+    cur = int(df["stage"].iloc[-1])
+    cfg = STAGES.get(cur)
+    phase = df["phase"].iloc[-1] if "phase" in df.columns else "main"
+
+    # contiguous block of the current stage
+    chg = (df["stage"] != df["stage"].shift()).cumsum()
+    seg = df[chg == chg.iloc[-1]]
+    corr = df["trial_correct"].astype(float)
+    rolling_acc = float(corr.tail(window).mean()) if len(corr) else 0.0
+
+    def last(col, default=np.nan):
+        return float(df[col].iloc[-1]) if col in df.columns else default
+
+    def acc_of(d):
+        return float(d["trial_correct"].astype(float).mean()) if len(d) else 0.0
+
+    def bias_of(d):
+        return (float(animal_bias(d, max(len(d), 1)).iloc[-1])
+                if len(d) else 1.0)
+
+    rows = []
+    if phase == "warmup" and cfg is not None and cfg.has_warmup:
+        seg_w = seg[seg["phase"] == "warmup"]
+        wn = int(last("warmup_trial", len(seg_w)))
+        rows = [
+            ("Warmup trials", wn, cfg.warmup_min_trials or 0, 0, False, "int"),
+            ("Warmup acc", acc_of(seg_w), cfg.warmup_acc_threshold or 0.0,
+             0.0, False, "pct"),
+            ("Warmup bias", bias_of(seg_w),
+             cfg.warmup_bias_threshold or BIAS_TARGET, 0.5, True, "pct"),
+        ]
+        return f"S{cur} warmup → enter main", rows
+
+    if cur == 0:
+        rows = [("Trials", len(df), 40, 0, False, "int")]
+    elif cur == 1:
+        empr = last("empR")
+        bias = abs(empr - 0.5) if not np.isnan(empr) and empr >= 0 \
+            else bias_of(seg)
+        rows = [
+            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False, "pct"),
+            ("Bias", bias, BIAS_TARGET, 0.5, True, "pct"),
+            ("Cue intensity", last("light_intensity"), cfg.staircase.target,
+             cfg.staircase.start, True, "int"),
+        ]
+    elif cur in (2, 4):
+        rows = [
+            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False, "pct"),
+            ("mu_nr", last("mu_nr"), cfg.staircase.target,
+             cfg.staircase.start, False, "f2"),
+        ]
+    elif cur == 3:
+        rows = [
+            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False, "pct"),
+            ("LED ms", last("led_ms"), cfg.staircase.target,
+             cfg.staircase.start, True, "int"),
+        ]
+    name = cfg.name if cfg else "?"
+    return f"S{cur} {name} → advance", rows
+
+
+def plot_stage_diagnostic(df, ax, window=40):
+    """Offline view of the HUD advance criteria for the current stage:
+    one bar per criterion (progress start→target), green if met else red."""
+    if df.empty or "stage" not in df.columns:
+        ax.text(0.5, 0.5, "No stage data", ha="center", va="center",
+                transform=ax.transAxes)
+        return
+    title, rows = _advance_criteria(df, window)
+    ax.set_title(title, fontsize=CFG["fs_label"])
+    if not rows:
+        ax.text(0.5, 0.5, "Final stage\nnothing to advance", ha="center",
+                va="center", transform=ax.transAxes, fontsize=CFG["fs_label"])
+        ax.axis("off")
+        return
+
+    def fmt(v, kind):
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "?"
+        return {"pct": f"{v * 100:.0f}%", "int": f"{v:.0f}",
+                "f2": f"{v:.2f}"}.get(kind, str(v))
+
+    names = []
+    for i, (name, val, target, start, lower, kind) in enumerate(rows):
+        nan = isinstance(val, float) and np.isnan(val)
+        met = (not nan) and ((val <= target) if lower else (val >= target))
+        if nan or start == target:
+            prog = 1.0 if met else 0.0
+        else:
+            prog = (val - start) / (target - start)
+        prog = float(np.clip(prog, 0.0, 1.0))
+        color = CFG["streak_ok"] if met else CFG["streak_err"]
+        ax.barh(i, prog, color=color, alpha=0.7, height=0.6)
+        mark = "✓" if met else "✗"
+        ax.text(min(prog, 1.0) + 0.02, i,
+                f"{fmt(val, kind)} / {fmt(target, kind)} {mark}",
+                va="center", ha="left", fontsize=CFG["fs"], color=color)
+        names.append(name)
+    ax.axvline(1.0, color="gray", ls="--", lw=1.0)
+    ax.set_xlim(0, 1.6)
+    ax.set_ylim(-0.5, len(rows) - 0.5)
+    ax.invert_yaxis()
+    ax.set_yticks(range(len(names)))
+    ax.set_yticklabels(names, fontsize=CFG["fs_label"])
+    ax.set_xticks([0, 1.0])
+    ax.set_xticklabels(["start", "target"], fontsize=CFG["fs"])
+
+
 def plot_psychometric(df, ax):
     """Psychometric curve per stage, main phase only."""
     df_main = df[(df["phase"] == "main") & (df["stage"] >= 1)]
@@ -718,6 +828,11 @@ def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
             step_delta_arr[_mask] = np.abs(
                 rng.normal(_base, _base * 0.3, _mask.sum()))
 
+    light_intensity = np.where(stage_arr < 1, 255,
+                               np.where(stage_arr == 1,
+                                        np.linspace(255, 30, n).astype(int), 0))
+    emp_r = np.clip(0.5 + rng.normal(0, 0.07, n), 0.05, 0.95)
+
     dates = pd.to_datetime("2026-01-01") + pd.to_timedelta(session_arr - 1,
                                                            unit="D")
     return pd.DataFrame({"trial":            np.arange(n),
@@ -730,6 +845,8 @@ def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
                          "mu_r":             mu_r,
                          "mu_nr":            mu_nr,
                          "led_ms":           led_ms,
+                         "light_intensity":  light_intensity,
+                         "empR":             emp_r,
                          "streak":           rng.integers(-5, 6, n),
                          "step_delta":       step_delta_arr,
                          "step_boost":       step_boost_arr,
@@ -768,9 +885,14 @@ def online_figure(df):
 
 def session_figure(df):
     df, xlabel = to_time_axis(df)
-    fig, (a1, a2, a3, a4) = plt.subplots(
-        4, 1, figsize=(11, 13),
+    fig, axd = plt.subplot_mosaic(
+        [["stair", "stair"],
+         ["acc", "acc"],
+         ["psy", "psy"],
+         ["lr", "diag"]],
+        figsize=(11, 13),
         gridspec_kw={"height_ratios": [2, 2, 1.5, 1.5]})
+    a1, a2 = axd["stair"], axd["acc"]
     shade_stages(a1, df)
     mark_checkpoints(a1, df)
     shade_phases(a1, df)
@@ -780,8 +902,9 @@ def session_figure(df):
     shade_phases(a2, df)
     shade_rescue(a2, df)
     plot_rolling_accuracy(df, a2, window=40)
-    plot_psychometric(df, a3)
-    plot_lr_bars(df, a4)
+    plot_psychometric(df, axd["psy"])
+    plot_lr_bars(df, axd["lr"])
+    plot_stage_diagnostic(df, axd["diag"], window=40)
     a1.set_xlabel(xlabel)
     a2.set_xlabel(xlabel)
     fig.suptitle("Session plot")

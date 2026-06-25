@@ -5,8 +5,8 @@ from village.custom_classes.session_plot_base import SessionPlotBase
 from task_stages import REQUIRED_COLS
 from plot_utils import (shade_phases, shade_stages, mark_checkpoints,
                         plot_staircase, plot_rolling_accuracy,
-                        plot_psychometric, plot_lr_bars, shade_rescue,
-                        to_time_axis)
+                        plot_psychometric, plot_lr_bars, plot_stage_diagnostic,
+                        shade_rescue, to_time_axis)
 
 
 class SessionPlot(SessionPlotBase):
@@ -30,13 +30,20 @@ class SessionPlot(SessionPlotBase):
         # Space trial-axis plots by real time within the session.
         df, self._xlabel = to_time_axis(df)
 
-        fig, (ax1, ax2, ax3, ax4) = plt.subplots(
-            4, 1, figsize=(width, height),
+        # Last row split: L/R bars (left half) + advance diagnostic (right).
+        fig, axd = plt.subplot_mosaic(
+            [["stair", "stair"],
+             ["acc", "acc"],
+             ["psy", "psy"],
+             ["lr", "diag"]],
+            figsize=(width, height),
             gridspec_kw={"height_ratios": [2, 2, 1.5, 1.5]})
-        for ax, fn in ((ax1, self._plot_staircase),
-                       (ax2, self._plot_rolling_accuracy),
-                       (ax3, self._plot_psychometric),
-                       (ax4, self._plot_lr_bars)):
+        ax1, ax2 = axd["stair"], axd["acc"]
+        for ax, fn in ((axd["stair"], self._plot_staircase),
+                       (axd["acc"], self._plot_rolling_accuracy),
+                       (axd["psy"], self._plot_psychometric),
+                       (axd["lr"], self._plot_lr_bars),
+                       (axd["diag"], self._plot_stage_diagnostic)):
             try:
                 fn(df, ax)
             except Exception as e:
@@ -76,3 +83,9 @@ class SessionPlot(SessionPlotBase):
     def _plot_lr_bars(self, df, ax):
         ax.clear()
         plot_lr_bars(df, ax)
+
+    def _plot_stage_diagnostic(self, df, ax):
+        ax.clear()
+        s = getattr(self, "settings", None)
+        window = int(getattr(s, "acc_window", 40))
+        plot_stage_diagnostic(df, ax, window=window)
