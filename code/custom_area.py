@@ -2,12 +2,12 @@ from village.custom_classes.custom_area_base import CustomAreaBase
 
 
 class TowerCustomArea(CustomAreaBase):
-    """T-shaped BOX area: corridor bar + vertical stem. Tune to your geometry
-    (pixels in the CAM_BOX_RESOLUTION frame)."""
+    """T-shaped BOX area in camera coords."""
 
     name = "T_AREA"
     active = True
     threshold = 65
 
-    polygons = [[[55, 215], [585, 215], [585, 275], [55, 275]],  # h
-                [[300, 60], [360, 60], [360, 275], [300, 275]]]  # v
+    polygons = [[[60, 225], [585, 225], [585, 265], [60, 265]],  # body bar
+                [[585, 215], [625, 215], [625, 285], [585, 285]],  # stem tip
+                [[15, 60], [60, 60], [60, 430], [15, 430]]]  # arms
