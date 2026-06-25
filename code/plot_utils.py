@@ -639,7 +639,7 @@ if __name__ == "__main__":
     mark_checkpoints(axs[1], df)
     shade_phases(axs[1], df)
     shade_rescue(axs[1], df)
-    plot_rolling_accuracy(df, axs[1], window=40, rescue_threshold=0.55)
+    plot_rolling_accuracy(df, axs[1])
 
     plot_streak(df, axs[2])
 

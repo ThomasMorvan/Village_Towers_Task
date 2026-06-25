@@ -33,7 +33,7 @@ class DrawFurthestX(CameraDrawBase):
         HUD_HEIGHT = 40
         HUD_COLOR = (75, 75, 75)
         GOOD_COLOR = (40, 180, 40)
-        BAD_COLOR = (40, 40, 220)
+        BAD_COLOR = (220, 40, 40)
         TEXT_SIZE = 0.4
         BIG_TEXT_SIZE = 0.5
         SMALL_TEXT_SIZE = 0.3
