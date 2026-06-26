@@ -321,8 +321,7 @@ class DrawFurthestX(CameraDrawBase):
         n = len(trace)
         for i in range(1, n):
             age = n - 1 - i
-            intensity = max(0, int(255 * (maxlen - age) / maxlen))
-            painter.setPen(QPen(QColor(0, intensity,
-                                       min(255, intensity + red_boost)), 2))
+            alpha = max(0, int(255 * (maxlen - age) / maxlen))
+            painter.setPen(QPen(QColor(0, 200, 80 + red_boost, alpha), 2))
             painter.drawLine(sx(trace[i - 1][0]), sy(trace[i - 1][1]),
                              sx(trace[i][0]), sy(trace[i][1]))
