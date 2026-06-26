@@ -743,20 +743,31 @@ def plot_difficulty_progression(df, ax):
 
     ax2 = ax.twinx()
 
+    def _trial_x(g):
+        """x = session number + within-session trial fraction [0, 1)."""
+        g = g.sort_values(["session", "trial"])
+        frac = (g.groupby("session").cumcount()
+                / g.groupby("session")["mu_nr"].transform("size"))
+        return g["session"] + frac, g
+
     if "mu_nr" in df_main.columns:
         df_s2 = df_main[df_main["stage"] == 2].dropna(subset=["mu_nr"])
         if not df_s2.empty:
-            sess = df_s2.groupby("session")["mu_nr"].median()
             cfg2 = STAGES.get(2)
-            ax.plot(sess.index, sess.values, "o-",
-                    color=cfg2.color if cfg2 else "salmon",
+            color = cfg2.color if cfg2 else "salmon"
+            x, g = _trial_x(df_s2)
+            ax.plot(x, g["mu_nr"], "-", color=color, alpha=0.25, lw=0.8)
+            sess = df_s2.groupby("session")["mu_nr"].median()
+            ax.plot(sess.index, sess.values, "o-", color=color,
                     label="S2 mu_nr", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
         df_s4 = df_main[df_main["stage"] == 4].dropna(subset=["mu_nr"])
         if not df_s4.empty:
-            sess = df_s4.groupby("session")["mu_nr"].median()
             cfg4 = STAGES.get(4)
-            ax.plot(sess.index, sess.values, "^-",
-                    color=cfg4.color if cfg4 else "tomato",
+            color = cfg4.color if cfg4 else "tomato"
+            x, g = _trial_x(df_s4)
+            ax.plot(x, g["mu_nr"], "-", color=color, alpha=0.25, lw=0.8)
+            sess = df_s4.groupby("session")["mu_nr"].median()
+            ax.plot(sess.index, sess.values, "^-", color=color,
                     label="S4 mu_nr", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
 
     if "led_ms" in df_main.columns:
