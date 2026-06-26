@@ -180,7 +180,8 @@ class TrainingProtocol(TrainingProtocolBase):
 
     def update_training_settings(self) -> None:
         """Run between sessions to advance stage / step."""
-        df_task = self.df[self.df["task"] == "TowersTask"]
+        df_task = self.df[(self.df["task"] == "TowersTask")
+                          & (self.df["subject"] == self.subject)]  # per mouse!
 
         # Scale refractory period linearly with previous session duration:
         # a session of maximum_duration (1h) maps to max_refractory (cap at 4h)
