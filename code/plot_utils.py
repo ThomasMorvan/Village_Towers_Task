@@ -570,7 +570,8 @@ def _advance_criteria(df, window, settings=None):
         return float(df[col].iloc[-1]) if col in df.columns else default
 
     def acc_of(d):
-        return float(d["trial_correct"].astype(float).mean()) if len(d) else 0.0
+        return (float(d["trial_correct"].astype(float).mean())
+                if len(d) else 0.0)
 
     def bias_of(d):
         return (float(animal_bias(d, max(len(d), 1)).iloc[-1])
@@ -733,7 +734,9 @@ def plot_stage_progression(df, ax):
 
 
 def plot_difficulty_progression(df, ax):
-    """Median mu_nr (S2, left axis) and led_ms (S3, right axis) per session."""
+    """Per-session staircase progress for every difficulty variable: mu_nr
+    (S2/S4, left axis), led_ms (S3, right axis) and cue light_intensity
+    (S1, outer right axis). Median dot per session plus a faint full trace."""
     df_main = (df[df["phase"] == "main"].copy() if "phase" in df.columns
                else df.copy())
     if df_main.empty:
@@ -741,44 +744,37 @@ def plot_difficulty_progression(df, ax):
                 ha="center", va="center", transform=ax.transAxes)
         return
 
-    ax2 = ax.twinx()
-
     def _trial_x(g):
         """x = session number + within-session offset in [-0.4, 0.4], so each
-        session's trace is centered on its integer tick (and its median dot)."""
+        session's trace is centered on its integer tick (and median dot)."""
         g = g.sort_values(["session", "trial"])
-        n = g.groupby("session")["mu_nr"].transform("size")
+        n = g.groupby("session")["trial"].transform("size")
         frac = g.groupby("session").cumcount() / n.where(n > 1, 1)
         return g["session"] + (frac - 0.5) * 0.8, g
 
-    if "mu_nr" in df_main.columns:
-        df_s2 = df_main[df_main["stage"] == 2].dropna(subset=["mu_nr"])
-        if not df_s2.empty:
-            cfg2 = STAGES.get(2)
-            color = cfg2.color if cfg2 else "salmon"
-            x, g = _trial_x(df_s2)
-            ax.plot(x, g["mu_nr"], "-", color=color, alpha=0.25, lw=0.8)
-            sess = df_s2.groupby("session")["mu_nr"].median()
-            ax.plot(sess.index, sess.values, "o-", color=color,
-                    label="S2 mu_nr", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
-        df_s4 = df_main[df_main["stage"] == 4].dropna(subset=["mu_nr"])
-        if not df_s4.empty:
-            cfg4 = STAGES.get(4)
-            color = cfg4.color if cfg4 else "tomato"
-            x, g = _trial_x(df_s4)
-            ax.plot(x, g["mu_nr"], "-", color=color, alpha=0.25, lw=0.8)
-            sess = df_s4.groupby("session")["mu_nr"].median()
-            ax.plot(sess.index, sess.values, "^-", color=color,
-                    label="S4 mu_nr", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
+    def _plot(axx, stage, var, marker, ls="-", fallback="gray"):
+        """Median + faint trace of one staircase variable for one stage."""
+        if var not in df_main.columns:
+            return
+        sub = df_main[df_main["stage"] == stage].dropna(subset=[var])
+        if sub.empty:
+            return
+        cfg = STAGES.get(stage)
+        color = cfg.color if cfg else fallback
+        x, g = _trial_x(sub)
+        axx.plot(x, g[var], "-", color=color, alpha=0.25, lw=0.8)
+        sess = sub.groupby("session")[var].median()
+        axx.plot(sess.index, sess.values, marker + ls, color=color,
+                 label=f"S{stage} {var}", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
 
-    if "led_ms" in df_main.columns:
-        df_s3 = df_main[df_main["stage"] == 3].dropna(subset=["led_ms"])
-        if not df_s3.empty:
-            sess = df_s3.groupby("session")["led_ms"].median()
-            cfg = STAGES.get(3)
-            ax2.plot(sess.index, sess.values, "s--",
-                     color=cfg.color if cfg else "lightcoral",
-                     label="S3 led_ms", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
+    ax2 = ax.twinx()                                   # led_ms (S3)
+    ax3 = ax.twinx()                                   # cue intensity (S1)
+    ax3.spines["right"].set_position(("outward", 48))
+
+    _plot(ax, 2, "mu_nr", "o")
+    _plot(ax, 4, "mu_nr", "^")
+    _plot(ax2, 3, "led_ms", "s", ls="--")
+    _plot(ax3, 1, "light_intensity", "D", ls=":")
 
     sessions = sorted(df_main["session"].dropna().unique())
     for s in sessions:
@@ -788,11 +784,13 @@ def plot_difficulty_progression(df, ax):
 
     ax.set_ylabel("mu_nr", color="steelblue")
     ax2.set_ylabel("led_ms (ms)", color=CFG["led_color"])
+    ax3.set_ylabel("cue intensity", color="darkgreen")
     ax.set_xlabel("Session")
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, fontsize=CFG["fs_label"],
-              loc="upper left")
+    handles = [hdl for a in (ax, ax2, ax3)
+               for hdl in a.get_legend_handles_labels()[0]]
+    labels = [lbl for a in (ax, ax2, ax3)
+              for lbl in a.get_legend_handles_labels()[1]]
+    ax.legend(handles, labels, fontsize=CFG["fs_label"], loc="upper left")
 
 
 def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
