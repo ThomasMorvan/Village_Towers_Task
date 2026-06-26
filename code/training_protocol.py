@@ -165,7 +165,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.resume_from_last = True  # resume last session difficulty
 
         # Reward policy (jackpot and effort scaling; see reward_policy.py)
-        self.settings.reward_policy_enabled = False  # master switch
+        self.settings.reward_policy_enabled = True  # master switch
         self.settings.reward_effort_max_mult = 2.0
         self.settings.reward_effort_delta_easy = 6.0  # delta with no bonus
         self.settings.reward_jackpot_mult = 10.0
