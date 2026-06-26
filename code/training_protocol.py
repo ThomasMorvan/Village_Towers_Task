@@ -85,6 +85,12 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.checkpoint_floor = 0.0
         self.settings.s0_valid_sessions = 0
         self.settings.s0_required_sessions = 2
+
+        # Last-known staircase state.
+        self.settings.last_mu_nr = 0.0
+        self.settings.last_led_ms = 5000
+        self.settings.last_light_intensity = 255
+
         # Stage 0 now has two steps: first with ROI proximity triggers (the
         # animal gets reward by entering the port ROI), then poke-only. Each
         # step needs s0_required_sessions good sessions. proximity_trigger
@@ -248,14 +254,20 @@ class TrainingProtocol(TrainingProtocolBase):
                 return
             # Stages 1-3: checkpoints handled within-session.
             # Restore last known stage/floor; never (?) regress below current.
-            last_row = df_task.sort_values(["session", "trial"]).iloc[-1]
+            df_sorted = df_task.sort_values(["session", "trial"])
+            last_row = df_sorted.iloc[-1]
             restored = int(min(MAX_STAGE, max(MIN_STAGE, last_row["stage"])))
             self.settings.stage = int(max(self.settings.stage, restored))
             self.settings.checkpoint = int(last_row.get("checkpoint", 0))
             self.settings.checkpoint_floor = float(last_row.get(
                 "checkpoint_floor", last_row.get("mu_nr", 0.0)))
-            self.settings.last_mu_nr = float(last_row.get("mu_nr", 0.0))
-            self.settings.last_led_ms = int(last_row.get("led_ms", 5000))
+            # Resume the staircase from the last MAIN-phase trial (because
+            # warmup trials have mu_nr=0 / led_ms=5000, so a session that ends
+            # (or stays) in warmup would reset the animal to 0 every session.
+            main = df_sorted[df_sorted["phase"] == "main"]
+            mu_src = main.iloc[-1] if not main.empty else last_row
+            self.settings.last_mu_nr = float(mu_src.get("mu_nr", 0.0))
+            self.settings.last_led_ms = int(mu_src.get("led_ms", 5000))
             self.settings.last_light_intensity = int(last_row.get(
                 "light_intensity", self.settings.light_intensity_high))
 
