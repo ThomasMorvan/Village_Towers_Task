@@ -469,14 +469,16 @@ class TowersTask(TowersTaskBase):
             output_actions=[]
         )
 
-        if STAGES[self._odc.stage].both_sides_rewarded:  # no timeout in S0
-            choice_timer = 0
-            choice_conditions = {Event.Port1In: "POKE LEFT",
-                                 Event.Port3In: "POKE RIGHT"}
-        else:
+        # No timeout in S0 (both sides rewarded) or in
+        # warmup/rescue trials (always-on LEDs)
+        if self._leds_timed():
             choice_timer = self.settings.response_time
             choice_conditions = {Event.Tup: "END TRIAL",
                                  Event.Port1In: "POKE LEFT",
+                                 Event.Port3In: "POKE RIGHT"}
+        else:
+            choice_timer = 0
+            choice_conditions = {Event.Port1In: "POKE LEFT",
                                  Event.Port3In: "POKE RIGHT"}
         self.bpod.add_state(
             state_name="WAIT FOR CHOICE POKE",
@@ -537,6 +539,8 @@ class TowersTask(TowersTaskBase):
                         "Port3In": TrialSide.RIGHT}
         first_poke = next((e for e in self.trial_data["ordered_list_of_events"]
                            if e in port_to_side), None)
+        if first_poke is None:  # timeout: no choice poke -> NaN, not wrong
+            return None
         return port_to_side.get(first_poke) == self.current_trial_rwd_side
 
     def _water_delivered_ul(self) -> float:
