@@ -744,11 +744,12 @@ def plot_difficulty_progression(df, ax):
     ax2 = ax.twinx()
 
     def _trial_x(g):
-        """x = session number + within-session trial fraction [0, 1)."""
+        """x = session number + within-session offset in [-0.4, 0.4], so each
+        session's trace is centered on its integer tick (and its median dot)."""
         g = g.sort_values(["session", "trial"])
-        frac = (g.groupby("session").cumcount()
-                / g.groupby("session")["mu_nr"].transform("size"))
-        return g["session"] + frac, g
+        n = g.groupby("session")["mu_nr"].transform("size")
+        frac = g.groupby("session").cumcount() / n.where(n > 1, 1)
+        return g["session"] + (frac - 0.5) * 0.8, g
 
     if "mu_nr" in df_main.columns:
         df_s2 = df_main[df_main["stage"] == 2].dropna(subset=["mu_nr"])
@@ -778,6 +779,12 @@ def plot_difficulty_progression(df, ax):
             ax2.plot(sess.index, sess.values, "s--",
                      color=cfg.color if cfg else "lightcoral",
                      label="S3 led_ms", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
+
+    sessions = sorted(df_main["session"].dropna().unique())
+    for s in sessions:
+        ax.axvline(s - 0.5, color="0.85", lw=0.6, zorder=0)
+    if sessions:
+        ax.axvline(sessions[-1] + 0.5, color="0.85", lw=0.6, zorder=0)
 
     ax.set_ylabel("mu_nr", color="steelblue")
     ax2.set_ylabel("led_ms (ms)", color=CFG["led_color"])
