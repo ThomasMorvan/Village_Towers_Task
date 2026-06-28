@@ -184,6 +184,11 @@ class OnlineDifficultyController:
 
         self._streak = 0
         self._perf_window = deque(maxlen=int(settings.acc_window))
+        if resume:  # carry rolling-acc window across sessions
+            self._perf_window.extend(int(c)
+                                     for c in getattr(settings,
+                                                      "last_perf_window",
+                                                      []) or [])
         self._rescue_trials_left = 0
         self.last_delta = 0.0
         self.last_boost = 1.0

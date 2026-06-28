@@ -269,6 +269,12 @@ class TrainingProtocol(TrainingProtocolBase):
             mu_src = main.iloc[-1] if not main.empty else last_row
             self.settings.last_mu_nr = float(mu_src.get("mu_nr", 0.0))
             self.settings.last_led_ms = int(mu_src.get("led_ms", 5000))
+            # Carry the rolling accuracy window across sessions so graduation
+            # isn't gated on filling acc_window main trials in one sitting.
+            stage_main = main[main["stage"] == restored]
+            win = int(getattr(self.settings, "acc_window", 40))
+            recent = stage_main["trial_correct"].dropna().tail(win)
+            self.settings.last_perf_window = [int(bool(c)) for c in recent]
             self.settings.last_light_intensity = int(last_row.get(
                 "light_intensity", self.settings.light_intensity_high))
 
