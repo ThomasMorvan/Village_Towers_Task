@@ -90,6 +90,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.last_mu_nr = 0.0
         self.settings.last_led_ms = 5000
         self.settings.last_light_intensity = 255
+        self.settings.last_perf_window = []
 
         # Stage 0 now has two steps: first with ROI proximity triggers (the
         # animal gets reward by entering the port ROI), then poke-only. Each
