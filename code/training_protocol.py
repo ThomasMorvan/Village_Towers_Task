@@ -76,7 +76,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.next_task = "TowersTask"
         self.settings.refractory_period = 3600 * 4  # default, will be updated
         self.settings.max_refractory = 3600 * 4
-        self.settings.minimum_duration = 1800
+        self.settings.minimum_duration = 2700  # TODO: maybe define in STAGES per stage?
         self.settings.maximum_duration = 3600
 
         # Stage and checkpoint tracking
