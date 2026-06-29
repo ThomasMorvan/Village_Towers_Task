@@ -41,16 +41,19 @@ class LeftOrRight:
     SIGMA_EMPIRICAL = 60
     MIN_RANGE = 0.15
     MAX_RANGE = 0.85
-    WINDOW_SIZE = 40
+    ERROR_WINDOW = 40   # trials per side for eR/eL
+    EMP_WINDOW = 180    # ~3σ of the 60 empirical window, to avoid truncation
 
     def __init__(self, verbose=False):
-        self.window_size = self.WINDOW_SIZE
-        self.history = deque(maxlen=self.WINDOW_SIZE)
         self.verbose = verbose
 
-        self._cache_hg_trials = self.half_gaussian(self.WINDOW_SIZE,
+        self.error_history = {TrialSide.LEFT: deque(maxlen=self.ERROR_WINDOW),
+                              TrialSide.RIGHT: deque(maxlen=self.ERROR_WINDOW)}
+        self.empirical_history = deque(maxlen=self.EMP_WINDOW)
+
+        self._cache_hg_trials = self.half_gaussian(self.ERROR_WINDOW,
                                                    self.SIGMA_TRIALS)
-        self._cache_hg_empirical = self.half_gaussian(self.WINDOW_SIZE,
+        self._cache_hg_empirical = self.half_gaussian(self.EMP_WINDOW,
                                                       self.SIGMA_EMPIRICAL)
 
         self.current_PR = -1
@@ -80,25 +83,28 @@ class LeftOrRight:
         return w / w.sum()
 
     def add_trial(self, trial_result: TrialResult):
-        self.history.append(trial_result)
+        self.empirical_history.append(trial_result)
+        if trial_result.side in self.error_history:
+            self.error_history[trial_result.side].append(trial_result)
 
     def weighted_error_fraction(self, side: TrialSide) -> float:
-        """Weighted average of the fraction of errors
-        in a side over the past window_size trials."""
+        """Weighted average of the fraction of errors in a side over the
+        past ERROR_WINDOW trials for each side."""
 
         # get trials and sort by recent first
-        trials = [t for t in self.history if t.side == side][::-1]
+        trials = list(self.error_history[side])[::-1]
         if len(trials) == 0:
             return 0.5
 
         errors = np.array([not t.correct for t in trials], dtype=float)
-        weighted = self._cache_hg_trials[:len(trials)] * errors
+        w = self._cache_hg_trials[:len(trials)]
+        frac = np.sum(w * errors) / np.sum(w)
         if self.verbose:
             print(f"{side}: {int(np.sum(errors))}/{len(trials)} "
                   f"({100 * np.sum(errors)/len(trials):.2f}%)"
-                  f" --> {np.sum(weighted):.3f}")
+                  f" --> {frac:.3f}")
 
-        return np.sum(weighted)
+        return frac
 
     def p_R(self) -> float:
         """Compute probability of drawing a right trial."""
@@ -120,18 +126,19 @@ class LeftOrRight:
 
     def empirical_fraction(self) -> float:
         """Correct pseudo-random.."""
-        if len(self.history) == 0:
+        if len(self.empirical_history) == 0:
             return 0.5
 
-        trials = list(self.history)[::-1]
+        trials = list(self.empirical_history)[::-1]
         is_right = np.array([t.side == TrialSide.RIGHT for t in trials],
                             dtype=float)
-        weighted = self._cache_hg_empirical[:len(trials)] * is_right
+        w = self._cache_hg_empirical[:len(trials)]
+        frac = np.sum(w * is_right) / np.sum(w)
         if self.verbose:
-            print(f"Empirical R: {np.sum(is_right)}/{len(trials)} "
+            print(f"Empirical R: {int(np.sum(is_right))}/{len(trials)} "
                   f"({100 * np.sum(is_right)/len(trials):.2f}%)"
-                  f" --> {np.sum(weighted):.3f}")
-        return np.sum(weighted)
+                  f" --> {frac:.3f}")
+        return frac
 
     def draw_next_trial(self) -> TrialSide:
         """Returns a TrialSide according to debiased pseudo-random rule."""
