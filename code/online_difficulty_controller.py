@@ -105,6 +105,7 @@ class OnlineDifficultyController:
         self.last_boost: float = 1.0
         self._streak: int = 0
         self._perf_window: deque = deque()
+        self._carryover_n: int = 0  # n trials from previous session
         self._rescue_trials_left: int = 0
 
         self._warmup: Warmup | None = None
@@ -189,6 +190,7 @@ class OnlineDifficultyController:
                                      for c in getattr(settings,
                                                       "last_perf_window",
                                                       []) or [])
+        self._carryover_n = len(self._perf_window)
         self._rescue_trials_left = 0
         self.last_delta = 0.0
         self.last_boost = 1.0
@@ -212,6 +214,9 @@ class OnlineDifficultyController:
             return self._check_warmup(side, correct)
 
         # Feed main-phase trials to the rolling window.
+        if (len(self._perf_window) == self._perf_window.maxlen
+                and self._carryover_n > 0):
+            self._carryover_n -= 1  # remove prev session trials from window
         self._perf_window.append(int(correct))
         cfg = self.config
 

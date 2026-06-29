@@ -136,6 +136,8 @@ class TowersTask(TowersTaskBase):
             "rolling_acc":      rolling_acc,
             "warmup_trial":     (self._odc.warmup_n, self._odc.warmup_min),
             "adv_label":        adv_label,
+            "perf_window":      list(self._odc._perf_window),
+            "carryover_n":      self._odc._carryover_n,
         }
 
     def _apply_stage(self, stage: int) -> None:

@@ -126,6 +126,7 @@ class DrawFurthestX(CameraDrawBase):
                 y += 20
 
         # bpod state machine current state
+        state_bottom = HUD_HEIGHT
         bpod_state = hud.get("bpod_state")
         if bpod_state:
             label = f"[{bpod_state}]"
@@ -136,6 +137,24 @@ class DrawFurthestX(CameraDrawBase):
             cv2.putText(frame, label, (MIN_X + 4, HUD_HEIGHT + th + 2),
                         _FONT, SMALL_TEXT_SIZE, (200, 200, 200), 1,
                         cv2.LINE_AA)
+            state_bottom = HUD_HEIGHT + th + 6
+
+        # rolling-acc window strip
+        win = hud.get("perf_window") or []
+        if win:
+            carry = hud.get("carryover_n", 0)
+            CELL_W, CELL_H, GAP = 5, 7, 1
+            sy0 = state_bottom + 3
+            for i, c in enumerate(win):
+                base = GOOD_COLOR if c else BAD_COLOR
+                col = tuple(int(v * 0.4) for v in base) if i < carry else base
+                x0 = MIN_X + i * (CELL_W + GAP)
+                cv2.rectangle(frame, (x0, sy0),
+                              (x0 + CELL_W, sy0 + CELL_H), col, -1)
+            if 0 < carry < len(win):  # divider between old and new trials
+                xd = MIN_X + carry * (CELL_W + GAP) - 1
+                cv2.line(frame, (xd, sy0 - 2), (xd, sy0 + CELL_H + 2),
+                         (230, 230, 230), 1)
 
     def _draw_accumulator(self, frame: np.ndarray, anm) -> None:
         """draw proba + distribution of choice from DDM"""
