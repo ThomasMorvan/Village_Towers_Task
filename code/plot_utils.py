@@ -78,18 +78,27 @@ CFG = {
 
 # bias target is the same across stages
 BIAS_TARGET = 0.10
+# bias window for the warmup gate, same across stages.
+WARMUP_BIAS_WINDOW = 20
 
 
 def animal_bias(df, window):
-    """Rolling side bias of the animal: |acc_right - acc_left| over the last
-    `window` trials, matching WarmupTracker.bias in the difficulty
-    controller. NaN until at least one trial of each side is in the window."""
+    """Side bias of the animal: |acc_right - acc_left| over the last `window`
+    trials (the bounded estimate used by the warmup gate), or cumulative when
+    `window is None` (the unbounded estimate). The warmup gate passes on the
+    more favourable of the two. NaN until at least one trial of each side is
+    seen."""
     side_r = df["trial_side"] == "R"
     corr = df["trial_correct"].astype(float)
 
     def _acc(mask):
-        c = (corr * mask).rolling(window, min_periods=1).sum()
-        n = mask.astype(float).rolling(window, min_periods=1).sum()
+        c = corr * mask
+        n = mask.astype(float)
+        if window is None:
+            c, n = c.expanding(min_periods=1).sum(), n.expanding(min_periods=1).sum()
+        else:
+            c, n = (c.rolling(window, min_periods=1).sum(),
+                    n.rolling(window, min_periods=1).sum())
         return c / n.replace(0, np.nan)
 
     return (_acc(side_r) - _acc(~side_r)).abs()
@@ -337,9 +346,13 @@ def plot_rolling_accuracy(df, ax, window: int = 100):
             label=f"Rolling accuracy ({window} trials)", zorder=2)
 
     if "trial_side" in df.columns:
-        bias = animal_bias(df, window)
-        ax.plot(df["trial"], bias, color=CFG["bias_color"], lw=CFG["acc_lw"],
-                alpha=0.8, label="Animal bias |accR-accL|", zorder=2)
+        bias_w = animal_bias(df, WARMUP_BIAS_WINDOW)
+        bias_c = animal_bias(df, None)
+        ax.plot(df["trial"], bias_w, color=CFG["bias_color"], lw=CFG["acc_lw"],
+                alpha=0.8, zorder=2,
+                label=f"Animal bias, {WARMUP_BIAS_WINDOW}-trial window")
+        ax.plot(df["trial"], bias_c, color=CFG["bias_color"], lw=CFG["acc_lw"],
+                ls="--", alpha=0.5, label="Animal bias, cumulative", zorder=2)
         ax.axhline(BIAS_TARGET, color=CFG["bias_color"], ls=":",
                    lw=CFG["thr_lw"], alpha=CFG["thr_alpha"],
                    label=f"Target bias ({BIAS_TARGET})")
@@ -574,8 +587,13 @@ def _advance_criteria(df, window, settings=None):
                 if len(d) else 0.0)
 
     def bias_of(d):
-        return (float(animal_bias(d, max(len(d), 1)).iloc[-1])
-                if len(d) else 1.0)
+        # Effective bias the gate sees.
+        if not len(d):
+            return 1.0
+        cumul = float(animal_bias(d, None).iloc[-1])
+        win = float(animal_bias(d, WARMUP_BIAS_WINDOW).iloc[-1])
+        vals = [v for v in (cumul, win) if v == v]  # drop NaN
+        return min(vals) if vals else 1.0
 
     rows = []
     if phase == "warmup" and cfg is not None and cfg.has_warmup:
