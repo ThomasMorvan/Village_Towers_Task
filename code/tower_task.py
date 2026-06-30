@@ -242,6 +242,9 @@ class TowersTask(TowersTaskBase):
         self._update_hud()
 
     def get_LEDs_for_trial(self):
+        # update LED on-duration for this trial based on current difficulty
+        self.led_on_duration = self._odc.difficulty.led_ms / 1000.0
+
         # Draw trial side (left or right).
         self.current_trial_rwd_side = self.left_or_right.draw_next_trial()
 
