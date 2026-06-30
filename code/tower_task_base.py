@@ -3,7 +3,7 @@ import time
 import json
 from pathlib import Path
 import numpy as np
-from threading import Event as thEvent
+from threading import Event as thEvent, Lock
 import importlib
 import importlib.util
 from village.scripts.log import log
@@ -81,6 +81,7 @@ class TowersTaskBase(TaskBase):
         self._current_frame = None
         self.accept_frames = thEvent()
         self.led_on_duration = 0
+        self.led_lock = Lock()
         self.set_ui_settings()
         self.led_strip = get_led_strip(num_leds=self.NUM_LEDS)
         self.led_positions = {i: LEDPosition(i)

@@ -1,5 +1,6 @@
 
 from collections import deque
+import time
 import numpy as np
 from village.custom_classes.task_base import (BpodEvent as Event,
                                               BpodOutput as Output)
@@ -24,6 +25,8 @@ class TowersTask(TowersTaskBase):
                                  TrialSide.RIGHT: np.array([], dtype=int)}
         self.available_leds_idx = set()
         self.used_leds_idx = set()
+        self._led_timers = []  # pending off-timers, cancelled at trial end
+        self._led_on_log = []  # [[epoch_t, [led_idx...]], ...] for this trial
         self.led_triggers = []  # sorted list of (trigger_x, led_idx)
         self.next_trigger = settings.get("CAM_BOX_RESOLUTION")[0] + 1
         self.distance_offset = 50  # FIXME: px in front of centroid for trigger
@@ -395,6 +398,7 @@ class TowersTask(TowersTaskBase):
             except Exception:
                 log.error("Error running function "
                           + str(self.SOFTCODE_SINGLE_LED_ON))
+            self._led_on_log.append([time.time(), list(triggered)])
             self._publish_led_pos()
 
         # Update next_trigger to next LED trigger and display it
@@ -615,13 +619,19 @@ class TowersTask(TowersTaskBase):
         self.register_value("proximity_trigger",
                             int(getattr(self.settings,
                                         "proximity_trigger", True)))
+        self.register_value("led_on_times", self._led_on_log)
 
         log.info(f"Trial: side={self.current_trial_rwd_side.value}, "
                  f"correct={self.is_trial_correct}")
 
-        # Reset trial state for next trial
-        self.led_strip.clear_strip()
-        self.led_strip.update_strip(sleep_duration=None)
+        # Reset trial state for next trial.
+        for t in self._led_timers:
+            t.cancel()
+        self._led_timers = []
+        self._led_on_log = []
+        with self.led_lock:
+            self.led_strip.clear_strip()
+            self.led_strip.update_strip(sleep_duration=None)
         self.available_leds_idx = set()
         self.used_leds_idx = set()
         self.led_triggers = []
