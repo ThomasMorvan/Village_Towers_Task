@@ -217,7 +217,9 @@ class TowersTask(TowersTaskBase):
         self.right_valve_opening_time = water_cal.get_valve_time(
             port=3, volume=self.settings.big_reward_amount_ul)
         self.settings.iti_time = 0
-        self.settings.response_time = 60
+        # TODO: fix/remove this in the future, because if we have timeouts, the
+        # task will end the trial and mark it as incorrect, which is not great.
+        self.settings.response_time = 3600  # effectively no timeout
 
         self._odc.start(self.settings)
 
