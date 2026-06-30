@@ -161,6 +161,7 @@ class TrainingProtocol(TrainingProtocolBase):
         # Task geometry
         self.settings.led_start_dead_zone_cm = 10
         self.settings.acc_window = 40  # rolling accuracy window (trials)
+        self.settings.warmup_bias_window = 20  # trials
         self.settings.rescue_enabled = True
         self.settings.rescue_block_size = 10
         self.settings.resume_from_last = True  # resume last session difficulty

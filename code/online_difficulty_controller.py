@@ -19,18 +19,24 @@ class Warmup:
     """Warmup phase tracker at start of each session
     (easy trials to warm up)."""
     def __init__(self, min_trials: int, acc_threshold: float,
-                 bias_threshold: float, enabled: bool = True) -> None:
+                 bias_threshold: float, bias_window: int = 20,
+                 enabled: bool = True) -> None:
         self.min_trials = min_trials
         self.acc_threshold = acc_threshold
         self.bias_threshold = bias_threshold
+        self.bias_window = bias_window
         self.enabled = enabled
-        self._perf: deque = deque()
+        self._perf: deque = deque()  # full history (accuracy + cumul bias)
+        self._bias_perf: deque = deque()  # recent window, bias only
 
-    def reset(self, maxlen: int | None = None) -> None:
+    def reset(self, maxlen: int | None = None,
+              bias_maxlen: int | None = None) -> None:
         self._perf = deque(maxlen=maxlen)
+        self._bias_perf = deque(maxlen=bias_maxlen)
 
     def record(self, side, correct: bool) -> None:
         self._perf.append((side, correct))
+        self._bias_perf.append((side, correct))
 
     @property
     def n(self) -> int:
@@ -41,21 +47,41 @@ class Warmup:
         n = len(self._perf)
         return sum(c for _, c in self._perf) / n if n else 0.0
 
-    @property
-    def bias(self) -> float:
+    @staticmethod
+    def _bias_of(pairs) -> float:
         from left_or_right import TrialSide
-        left_c = [c for s, c in self._perf if s == TrialSide.LEFT]
-        right_c = [c for s, c in self._perf if s == TrialSide.RIGHT]
+        left_c = [c for s, c in pairs if s == TrialSide.LEFT]
+        right_c = [c for s, c in pairs if s == TrialSide.RIGHT]
         return (abs(sum(left_c) / len(left_c) - sum(right_c) / len(right_c))
                 if left_c and right_c else 1.0)
+
+    @property
+    def cumul_bias(self) -> float:
+        return self._bias_of(self._perf)
+
+    @property
+    def win_bias(self) -> float:
+        return self._bias_of(self._bias_perf)
+
+    @property
+    def bias(self) -> float:
+        # Effective bias = whichever estimate is more favourable (HUD value).
+        return min(self.cumul_bias, self.win_bias)
 
     def passed(self) -> bool:
         if not self.enabled:
             return True
-        # Compare at percent resolution so the gate is easier and match HUD
+        # Accuracy is cumulative. Bias passes if EITHER the lifetime OR the
+        # recent-window estimate is within threshold: the window lets a mouse
+        # that corrected an early one-sided start advance, while the cumulative
+        # estimate protects sessions where one side is too thinly sampled for a
+        # reliable windowed estimate. This avoids warmup hell.
+        thr = round(self.bias_threshold * 100)
+        bias_ok = (round(self.cumul_bias * 100) <= thr
+                   or round(self.win_bias * 100) <= thr)
         return (self.n >= self.min_trials
                 and round(self.acc * 100) >= round(self.acc_threshold * 100)
-                and round(self.bias * 100) <= round(self.bias_threshold * 100))
+                and bias_ok)
 
 
 class OnsetBoost:
@@ -197,7 +223,7 @@ class OnlineDifficultyController:
 
         cfg = STAGES[self.stage]
         self.phase = "warmup" if cfg.has_warmup else "main"
-        self._reset_warmup()
+        self._reset_warmup(settings)
         self._reset_boost(settings)
 
     def after_trial(self, correct: bool, side, settings,
@@ -241,7 +267,7 @@ class OnlineDifficultyController:
             return self._check_s1_advance(settings, bias)
         return self._check_checkpoint(settings)
 
-    def _reset_warmup(self) -> None:
+    def _reset_warmup(self, settings) -> None:
         cfg = self.config
         min_trials = int(cfg.warmup_min_trials
                          if cfg.warmup_min_trials is not None else 10)
@@ -249,11 +275,14 @@ class OnlineDifficultyController:
                     if cfg.warmup_acc_threshold is not None else 0.85)
         bias = float(cfg.warmup_bias_threshold
                      if cfg.warmup_bias_threshold is not None else 0.10)
+
+        bias_window = int(settings.warmup_bias_window)
         self._warmup = Warmup(min_trials=min_trials,
                               acc_threshold=acc,
                               bias_threshold=bias,
+                              bias_window=bias_window,
                               enabled=cfg.has_warmup)
-        self._warmup.reset()
+        self._warmup.reset(maxlen=None, bias_maxlen=bias_window)
 
     def _reset_boost(self, settings) -> None:
         self._boost = OnsetBoost(M=float(settings.staircase_M),
