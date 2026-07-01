@@ -230,6 +230,14 @@ def mark_checkpoints(ax, df, y_frac=0.95):
                 transform=ax.get_xaxis_transform())
 
 
+def _count_leds(s):
+    """Number of cues"""
+    if not isinstance(s, str):
+        return np.nan
+    inner = s.strip().strip("[]").strip()
+    return 0 if not inner else inner.count(",") + 1
+
+
 def _plot_broken(ax, df_sub, y, mask, label=None, **kw):
     """Break warmup and main phase variables."""
     yv = df_sub[y] if isinstance(y, str) else y
@@ -274,6 +282,18 @@ def plot_staircase(df, ax, twin_ax=None):
                    ls=":", lw=CFG["target_lw"],
                    alpha=CFG["target_alpha"],
                    label=f"S4 target {STAGES[4].staircase.target}")
+
+    # Effective mu_nr per trial.
+    if {"L LEDs", "R LEDs", "trial_side"} <= set(df.columns):
+        nL = df["L LEDs"].map(_count_leds)
+        nR = df["R LEDs"].map(_count_leds)
+        unrew = nL.where(df["trial_side"] == "R",
+                         nR.where(df["trial_side"] == "L", np.nan))
+        df_ur = df.assign(_unrew=unrew).dropna(subset=["_unrew"])
+        if not df_ur.empty:
+            _plot_broken(ax, df_ur, "_unrew", main_active, lw=0.8, alpha=0.35,
+                         label=r"$\mu_{NR}$ effective",
+                         color=CFG["mu_nr_color"], zorder=1)
 
     if "delta_towers" in df.columns:
         df_dt = df.dropna(subset=["delta_towers"])
