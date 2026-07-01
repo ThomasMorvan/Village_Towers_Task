@@ -391,20 +391,18 @@ def plot_rolling_accuracy(df, ax, window: int = 100):
             markersize=7, alpha=0.8, label="Incorrect trials")
 
     # Accuracy
-    main = df[df["phase"] == "main"] if "phase" in df.columns else df
-    if not main.empty:
-        seg = ((main["stage"] != main["stage"].shift()).cumsum()
-               if "stage" in main.columns
-               else pd.Series(1, index=main.index))
-        first = True
-        for _, g in main.groupby(seg):
-            roll = g["trial_correct"].astype(float).rolling(
-                window, min_periods=1).mean()
-            ax.plot(g["trial"], roll, color=CFG["acc_color"],
-                    lw=CFG["acc_lw"], zorder=2,
-                    label=(f"Rolling accuracy ({window} trials, main)"
-                           if first else "_nolegend_"))
-            first = False
+    key = df.get("stage", pd.Series(0, index=df.index)).astype(str)
+    if "phase" in df.columns:
+        key = key + "|" + df["phase"].astype(str)
+    for _, g in df.groupby((key != key.shift()).cumsum()):
+        warm = "phase" in g.columns and str(g["phase"].iloc[0]) == "warmup"
+        corr = g["trial_correct"].astype(float)
+        roll = (corr.expanding(min_periods=1).mean() if warm
+                else corr.rolling(window, min_periods=1).mean())
+        lbl = f"Rolling accuracy ({window} trials)"
+        ax.plot(g["trial"], roll, color=CFG["acc_color"],
+                lw=CFG["acc_lw"], zorder=2,
+                label=lbl if warm else "_nolegend_")
 
     if "trial_side" in df.columns:
         bias_w = animal_bias(df, WARMUP_BIAS_WINDOW)
