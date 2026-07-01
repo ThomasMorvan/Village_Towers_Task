@@ -393,16 +393,18 @@ def plot_rolling_accuracy(df, ax, window: int = 100):
     # Accuracy
     main = df[df["phase"] == "main"] if "phase" in df.columns else df
     if not main.empty:
-        corr = main["trial_correct"].astype(float)
-        if "stage" in main.columns:
-            seg = (main["stage"] != main["stage"].shift()).cumsum()
-            rolling = corr.groupby(seg).transform(
-                lambda s: s.rolling(window, min_periods=1).mean())
-        else:
-            rolling = corr.rolling(window, min_periods=1).mean()
-        ax.plot(main["trial"], rolling, color=CFG["acc_color"],
-                lw=CFG["acc_lw"], zorder=2,
-                label=f"Rolling accuracy ({window} trials, main)")
+        seg = ((main["stage"] != main["stage"].shift()).cumsum()
+               if "stage" in main.columns
+               else pd.Series(1, index=main.index))
+        first = True
+        for _, g in main.groupby(seg):
+            roll = g["trial_correct"].astype(float).rolling(
+                window, min_periods=1).mean()
+            ax.plot(g["trial"], roll, color=CFG["acc_color"],
+                    lw=CFG["acc_lw"], zorder=2,
+                    label=(f"Rolling accuracy ({window} trials, main)"
+                           if first else "_nolegend_"))
+            first = False
 
     if "trial_side" in df.columns:
         bias_w = animal_bias(df, WARMUP_BIAS_WINDOW)
