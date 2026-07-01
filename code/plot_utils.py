@@ -80,12 +80,14 @@ CFG = {
 BIAS_TARGET = 0.10
 # bias window for the warmup gate, same across stages.
 WARMUP_BIAS_WINDOW = 20
+# Plotted position of "always-on" LED duration.
+LED_MS_INF = 5500
 
 
 def animal_bias(df, window):
-    """Side bias of the animal: |acc_right - acc_left| over the last `window`
+    """Side bias of the animal: |acc_right - acc_left| over the last window
     trials (the bounded estimate used by the warmup gate), or cumulative when
-    `window is None` (the unbounded estimate). The warmup gate passes on the
+    window is None (the unbounded estimate). The warmup gate passes on the
     more favourable of the two. NaN until at least one trial of each side is
     seen."""
     side_r = df["trial_side"] == "R"
@@ -95,10 +97,11 @@ def animal_bias(df, window):
         c = corr * mask
         n = mask.astype(float)
         if window is None:
-            c, n = c.expanding(min_periods=1).sum(), n.expanding(min_periods=1).sum()
+            c = c.expanding(min_periods=1).sum()
+            n = n.expanding(min_periods=1).sum()
         else:
-            c, n = (c.rolling(window, min_periods=1).sum(),
-                    n.rolling(window, min_periods=1).sum())
+            c = c.rolling(window, min_periods=1).sum()
+            n = n.rolling(window, min_periods=1).sum()
         return c / n.replace(0, np.nan)
 
     return (_acc(side_r) - _acc(~side_r)).abs()
@@ -227,11 +230,29 @@ def mark_checkpoints(ax, df, y_frac=0.95):
                 transform=ax.get_xaxis_transform())
 
 
+def _plot_broken(ax, df_sub, y, mask, label=None, **kw):
+    """Break warmup and main phase variables."""
+    yv = df_sub[y] if isinstance(y, str) else y
+    m = mask.loc[df_sub.index]
+    seg = (m != m.shift()).cumsum()
+    first = True
+    for _, g in df_sub.groupby(seg):
+        ax.plot(g["trial"], yv.loc[g.index],
+                label=(label if first else "_nolegend_"), **kw)
+        first = False
+
+
 def plot_staircase(df, ax, twin_ax=None):
     """Plot difficulty mu_r, mu_nr (left axis) and led_ms (right axis)."""
     ax2 = twin_ax if twin_ax is not None else ax.twinx()
     ax2.yaxis.tick_right()
     ax2.yaxis.set_label_position("right")
+
+    main_active = pd.Series(True, index=df.index)
+    if "phase" in df.columns:
+        main_active = main_active & (df["phase"] == "main")
+    if "rescue" in df.columns:
+        main_active = main_active & (df["rescue"].fillna(0).astype(int) == 0)
 
     df_mu_r = df.dropna(subset=["mu_r"])
     if not df_mu_r.empty:
@@ -241,9 +262,8 @@ def plot_staircase(df, ax, twin_ax=None):
 
     df_mu_nr = df.dropna(subset=["mu_nr"])
     if not df_mu_nr.empty:
-        ax.plot(df_mu_nr["trial"], df_mu_nr["mu_nr"],
-                color=CFG["mu_nr_color"], lw=CFG["mu_nr_lw"],
-                label=r"$\mu_{NR}$")
+        _plot_broken(ax, df_mu_nr, "mu_nr", main_active, label=r"$\mu_{NR}$",
+                     color=CFG["mu_nr_color"], lw=CFG["mu_nr_lw"])
         ax.axhline(STAGES[2].staircase.target,
                    color=CFG["mu_nr_color"],
                    ls=CFG["target_ls"], lw=CFG["target_lw"],
@@ -264,14 +284,23 @@ def plot_staircase(df, ax, twin_ax=None):
                        zorder=1, label=r"$\Delta$towers")
         df_exp = df.dropna(subset=["mu_r", "mu_nr"])
         if not df_exp.empty:
-            ax.plot(df_exp["trial"], df_exp["mu_r"] - df_exp["mu_nr"],
-                    color=CFG["delta_color"], lw=CFG["mu_nr_lw"],
-                    zorder=2, label=r"$\Delta\mu$")
+            _plot_broken(ax, df_exp, df_exp["mu_r"] - df_exp["mu_nr"],
+                         main_active, label=r"$\Delta\mu$",
+                         color=CFG["delta_color"],
+                         lw=CFG["mu_nr_lw"], zorder=2)
 
-    df_led = df.dropna(subset=["led_ms"])
+    # led_ms. inf when warmup or early stages.
+    timed_stages = {s for s, c in STAGES.items()
+                    if getattr(c, "timed_leds", False)}
+    timed = main_active.copy()
+    if "stage" in df.columns:
+        timed = timed & df["stage"].isin(timed_stages)
+    df_led = df.dropna(subset=["led_ms"]).copy()
     if not df_led.empty:
-        ax2.plot(df_led["trial"], df_led["led_ms"],
-                 color=CFG["led_color"], lw=CFG["led_lw"], label="led_ms")
+        df_led["_ledplot"] = df_led["led_ms"].where(
+            timed.loc[df_led.index], LED_MS_INF)
+        _plot_broken(ax2, df_led, "_ledplot", timed, label="led_ms",
+                     color=CFG["led_color"], lw=CFG["led_lw"])
         ax2.axhline(STAGES[3].staircase.target,
                     color=CFG["led_color"],
                     ls=CFG["target_ls"], lw=CFG["target_lw"],
@@ -312,8 +341,10 @@ def plot_staircase(df, ax, twin_ax=None):
     ax2.set_ylabel("led_ms (ms)", color=CFG["led_color"])
     ax.tick_params(axis="y", labelcolor=CFG["mu_nr_color"])
     ax2.tick_params(axis="y", labelcolor=CFG["led_color"])
-    ax2.set_yticks(np.arange(0, 5100, 1000))
-    ax2.set_ylim(0, 5100)
+    ax2.set_yticks(list(np.arange(0, 5001, 1000)) + [LED_MS_INF])
+    ax2.set_yticklabels([str(int(v)) for v in np.arange(0, 5001, 1000)]
+                        + [r"$\infty$"])
+    ax2.set_ylim(0, LED_MS_INF + 200)
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2,
@@ -329,9 +360,6 @@ def plot_rolling_accuracy(df, ax, window: int = 100):
                 transform=ax.transAxes)
         return
 
-    rolling = df["trial_correct"].astype(float).rolling(window, min_periods=1)
-    rolling = rolling.mean()
-
     ok = df["trial_correct"].astype(bool)
     ax.vlines(df.loc[ok, "trial"], 0.96, 1.0,
               color=CFG["streak_ok"], alpha=0.5, lw=0.6, zorder=1)
@@ -342,8 +370,19 @@ def plot_rolling_accuracy(df, ax, window: int = 100):
     ax.plot([], [], color=CFG["streak_err"], marker="|", lw=0,
             markersize=7, alpha=0.8, label="Incorrect trials")
 
-    ax.plot(df["trial"], rolling, color=CFG["acc_color"], lw=CFG["acc_lw"],
-            label=f"Rolling accuracy ({window} trials)", zorder=2)
+    # Accuracy
+    main = df[df["phase"] == "main"] if "phase" in df.columns else df
+    if not main.empty:
+        corr = main["trial_correct"].astype(float)
+        if "stage" in main.columns:
+            seg = (main["stage"] != main["stage"].shift()).cumsum()
+            rolling = corr.groupby(seg).transform(
+                lambda s: s.rolling(window, min_periods=1).mean())
+        else:
+            rolling = corr.rolling(window, min_periods=1).mean()
+        ax.plot(main["trial"], rolling, color=CFG["acc_color"],
+                lw=CFG["acc_lw"], zorder=2,
+                label=f"Rolling accuracy ({window} trials, main)")
 
     if "trial_side" in df.columns:
         bias_w = animal_bias(df, WARMUP_BIAS_WINDOW)
@@ -870,7 +909,8 @@ def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
 
     light_intensity = np.where(stage_arr < 1, 255,
                                np.where(stage_arr == 1,
-                                        np.linspace(255, 30, n).astype(int), 0))
+                                        np.linspace(255, 30, n).astype(int), 0)
+                               )
     emp_r = np.clip(0.5 + rng.normal(0, 0.07, n), 0.05, 0.95)
 
     dates = pd.to_datetime("2026-01-01") + pd.to_timedelta(session_arr - 1,
