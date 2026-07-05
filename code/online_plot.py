@@ -7,7 +7,7 @@ from plot_utils import (shade_phases, shade_stages, mark_checkpoints,
                         plot_staircase, plot_rolling_accuracy,
                         plot_streak, plot_step, shade_rescue, to_time_axis)
 
-DISABLE_ONLINE_PLOT = True
+DISABLE_ONLINE_PLOT = False
 
 class Online_Plot(OnlinePlotBase):
     def __init__(self) -> None:

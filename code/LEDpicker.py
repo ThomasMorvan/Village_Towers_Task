@@ -2,6 +2,7 @@
 process with refractory interval (described in doi: 10.3389/fnbeh.2018.00036)
 and converting those tower locations to LED indices."""
 
+import math
 import numpy as np
 
 
@@ -67,10 +68,7 @@ class LedPicker():
         # 1-2) Draw n ~ Poisson(mu) that is less than the maximum
         # possible number of towers given the refractory period
         maxN = int(np.floor(L_placeable / self.refractory_period))
-        while True:
-            n = int(self.rng.poisson(mu))
-            if n <= maxN:
-                break
+        n = self._draw_truncated_poisson(mu, maxN)
 
         # 3-6) Randomly distribute locations within [0, L_placeable], but
         # impose refractory interval
@@ -86,6 +84,15 @@ class LedPicker():
         # Offset into the valid placement region (past the dead zone)
         y = y + self.start_dead_zone_cm
         return np.sort(np.round(y, rounding))
+
+    def _draw_truncated_poisson(self, mu: float, maxN: int) -> int:
+        """Draw n ~ Poisson(mu) conditioned on n <= maxN."""
+        if mu <= 0 or maxN <= 0:
+            return 0
+        ks = np.arange(maxN + 1)
+        logw = ks * math.log(mu) - np.array([math.lgamma(k + 1) for k in ks])
+        w = np.exp(logw - logw.max())
+        return int(self.rng.choice(ks, p=w / w.sum()))
 
     def draw_towers(self) -> tuple[np.ndarray, np.ndarray]:
         """Draw towers and return their LED indices."""
