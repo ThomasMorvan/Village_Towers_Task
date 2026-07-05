@@ -18,6 +18,8 @@ class Online_Plot(OnlinePlotBase):
         (self.ax1, self.ax2), (self.ax3, self.ax4) = axs
         self._staircase_twin = self.ax1.twinx()
         self._step_twin = self.ax4.twinx()
+        self._step_cue_twin = self.ax4.twinx()
+        self._step_cue_twin.spines["right"].set_position(("axes", 1.10))
         dpi = self.fig.get_dpi()
         self.window_geometry = (100, 50,
                                 int(width * dpi), int(height * dpi))
@@ -107,9 +109,11 @@ class Online_Plot(OnlinePlotBase):
     def _plot_step(self, df, ax):
         self._clear_ax(ax)
         self._clear_twin(self._step_twin)
+        self._clear_twin(self._step_cue_twin)
         shade_stages(ax, df)
         shade_phases(ax, df)
-        plot_step(df, ax, twin_ax=self._step_twin)
+        plot_step(df, ax, twin_ax=self._step_twin,
+                  cue_twin_ax=self._step_cue_twin)
 
     def _error_plot(self, ax, msg="Could not create plot"):
         self._clear_ax(ax)

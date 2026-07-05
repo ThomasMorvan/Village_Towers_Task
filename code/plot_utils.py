@@ -535,7 +535,7 @@ def _step_bars(ax, sub_df, boost_series, ok_color, err_color, width=1.0):
                label="boost")
 
 
-def plot_step(df, ax, twin_ax=None):
+def plot_step(df, ax, twin_ax=None, cue_twin_ax=None):
     """Step size per trial.
     Left axis: density steps (S2/S4). Right axis: ms steps (S3, ms).
     Bars split into base step + gold stacked top for boost contribution.
@@ -570,8 +570,9 @@ def plot_step(df, ax, twin_ax=None):
 
     df_cue = df[df["stage"] == 1] if "stage" in df.columns else pd.DataFrame()
     if not df_cue.empty:
-        ax3 = ax.twinx()
+        ax3 = cue_twin_ax if cue_twin_ax is not None else ax.twinx()
         ax3.spines["right"].set_position(("axes", 1.10))
+        ax3.set_visible(True)
         _step_bars(ax3, df_cue,
                    boost if boost is not None else df_cue["step_delta"],
                    STAGES[1].color, "darkgreen", width=w)
