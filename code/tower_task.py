@@ -1,6 +1,7 @@
 
 from collections import deque
 import time
+import traceback
 import numpy as np
 from village.custom_classes.task_base import (BpodEvent as Event,
                                               BpodOutput as Output)
@@ -355,9 +356,12 @@ class TowersTask(TowersTaskBase):
         self.current_led = leds[0] if len(leds) == 1 else leds
         try:
             self.execute_function(self.SOFTCODE_ALL_LEDS_ON)
-        except Exception:
-            log.error("Error running function "
-                      + str(self.SOFTCODE_ALL_LEDS_ON))
+        except Exception as exc:
+            log.error(
+                f"[always on] SoftCode {self.SOFTCODE_ALL_LEDS_ON} "
+                f"(all LEDs on) failed: {exc!r}",
+                exception=traceback.format_exc(),
+            )
 
         self.used_leds_idx.update(self.available_leds_idx)
         self.available_leds_idx.clear()
@@ -395,9 +399,12 @@ class TowersTask(TowersTaskBase):
                                 else triggered)
             try:
                 self.execute_function(self.SOFTCODE_SINGLE_LED_ON)
-            except Exception:
-                log.error("Error running function "
-                          + str(self.SOFTCODE_SINGLE_LED_ON))
+            except Exception as exc:
+                log.error(
+                    f"[single LED on] SoftCode {self.SOFTCODE_SINGLE_LED_ON} "
+                    f"(proximity LED) failed: {exc!r}",
+                    exception=traceback.format_exc(),
+                )
             self._led_on_log.append([time.time(), list(triggered)])
             self._publish_led_pos()
 
