@@ -7,10 +7,16 @@ from plot_utils import (shade_phases, shade_stages, mark_checkpoints,
                         plot_staircase, plot_rolling_accuracy,
                         plot_streak, plot_step, shade_rescue, to_time_axis)
 
+DISABLE_ONLINE_PLOT = True
 
 class Online_Plot(OnlinePlotBase):
     def __init__(self) -> None:
         super().__init__()
+
+    def update_canvas(self, df) -> None:
+        if DISABLE_ONLINE_PLOT:
+            return
+        super().update_canvas(df)
 
     def create_figure_and_axes(self, width=14, height=8):
         self.fig, axs = plt.subplots(2, 2, figsize=(width, height),
