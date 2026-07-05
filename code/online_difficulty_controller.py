@@ -124,7 +124,6 @@ class OnlineDifficultyController:
     def __init__(self) -> None:
         self.stage: int = 0
         self.checkpoint: int = 0
-        self.checkpoint_floor: float = 0.0
         self.difficulty: Difficulty = Difficulty()
         self.phase: str = "main"
         self.last_delta: float = 0.0
@@ -140,6 +139,12 @@ class OnlineDifficultyController:
     @property
     def config(self):
         return STAGES[self.stage]
+
+    @property
+    def checkpoint_floor(self) -> float:
+        """Lower bound the current stage's staircase can't regress past. It is
+        always the stage's own staircase start, so derive it to avoid leaks."""
+        return float(self.config.staircase.start)
 
     @property
     def streak(self) -> int:
@@ -175,19 +180,17 @@ class OnlineDifficultyController:
         """Restore from settings; initialise difficulty with resume logic."""
         self.stage = min(int(getattr(settings, "stage", 0)), MAX_STAGE)
         self.checkpoint = int(getattr(settings, "checkpoint", 0))
-        self.checkpoint_floor = float(getattr(settings, "checkpoint_floor",
-                                              0.0))
-
         floor = self.checkpoint_floor
         resume = bool(getattr(settings, "resume_from_last", True))
         mu_r = STAGES[self.stage].rwd_density
         min_ms = int(getattr(settings, "min_tower_duration", 200))
         if self.stage in (2, 4):
+            sc = STAGES[self.stage].staircase
             last = (float(getattr(settings, "last_mu_nr", floor)) if resume
                     else floor)
             led_ms = 5000 if self.stage == 2 else min_ms
-            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=max(last, floor),
-                                         led_ms=led_ms)
+            mu_nr = min(max(last, floor), sc.target)
+            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=mu_nr, led_ms=led_ms)
         elif self.stage == 3:
             last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
                        else 5000)
@@ -292,7 +295,6 @@ class OnlineDifficultyController:
     def _pass_checkpoint(self, to_stage: int, settings) -> AdaptationEvent:
         self.checkpoint = to_stage - 1
         new_start = STAGES[to_stage].staircase.start
-        self.checkpoint_floor = new_start
         prev = self.difficulty
         mu_r = STAGES[to_stage].rwd_density
 

@@ -82,7 +82,6 @@ class TrainingProtocol(TrainingProtocolBase):
         # Stage and checkpoint tracking
         self.settings.stage = 0
         self.settings.checkpoint = 0
-        self.settings.checkpoint_floor = 0.0
         self.settings.s0_valid_sessions = 0
         self.settings.s0_required_sessions = 2
 
@@ -242,10 +241,9 @@ class TrainingProtocol(TrainingProtocolBase):
                     prox = False
                     print("   * [TrainingProtocol] Stage 0: proximity -> poke")
                 else:
-                    # 2nd step done: advance to stage 1, reset checkpoint/floor
+                    # 2nd step done: advance to stage 1, reset checkpoint
                     self.settings.stage = 1
                     self.settings.checkpoint = 1
-                    self.settings.checkpoint_floor = 0.0
                     print("   * [TrainingProtocol] Stage 0 -> 1")
 
             # Per-step count: after a flip this recomputes for the poke step
@@ -256,14 +254,12 @@ class TrainingProtocol(TrainingProtocolBase):
             if self.last_task != "TowersTask":
                 return
             # Stages 1-3: checkpoints handled within-session.
-            # Restore last known stage/floor; never (?) regress below current.
+            # Restore last known stage; never (?) regress below current.
             df_sorted = df_task.sort_values(["session", "trial"])
             last_row = df_sorted.iloc[-1]
             restored = int(min(MAX_STAGE, max(MIN_STAGE, last_row["stage"])))
             self.settings.stage = int(max(self.settings.stage, restored))
             self.settings.checkpoint = int(last_row.get("checkpoint", 0))
-            self.settings.checkpoint_floor = float(last_row.get(
-                "checkpoint_floor", last_row.get("mu_nr", 0.0)))
             # Resume the staircase from the last MAIN-phase trial (because
             # warmup trials have mu_nr=0 / led_ms=5000, so a session that ends
             # (or stays) in warmup would reset the animal to 0 every session.
@@ -303,7 +299,6 @@ class TrainingProtocol(TrainingProtocolBase):
             "Stage": [
                 "stage",
                 "checkpoint",
-                "checkpoint_floor",
                 "s0_required_sessions",
                 "proximity_trigger",
                 "resume_from_last",
