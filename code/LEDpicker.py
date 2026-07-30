@@ -132,6 +132,38 @@ class LedPicker():
         self.verify_parameters()
 
 
+def test_truncated_equals_old_reject() -> None:
+    """
+    The truncated-Poisson draw must:
+        - match the old reject-until-n<=maxN loop distribution
+        - not be stuck forever (previous `while True` freeze when mu >> maxN).
+    """
+    import time
+
+    def old_reject(rng, mu, maxN):
+        while True:
+            n = int(rng.poisson(mu))
+            if n <= maxN:
+                return n
+
+    lp = LedPicker(rng=np.random.default_rng(0))
+    mu, maxN = 3.0, 10  # should work fine
+    rng_old = np.random.default_rng(0)
+    new = np.array([lp._draw_truncated_poisson(mu, maxN)
+                    for _ in range(20000)])
+    old = np.array([old_reject(rng_old, mu, maxN) for _ in range(20000)])
+    assert new.max() <= maxN and new.min() >= 0
+    assert abs(new.mean() - old.mean()) < 0.05, (new.mean(), old.mean())
+
+    lp = LedPicker(rng=np.random.default_rng(1))
+    t0 = time.perf_counter()
+    for _ in range(10000):
+        n = lp._draw_truncated_poisson(mu=50.0, maxN=1)  # accept prob ~1e-20
+        assert n in (0, 1)
+    assert time.perf_counter() - t0 < 1.0  # old loop: effectively forever
+    print("OK: truncated Poisson matches the old distribution and can't spin")
+
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from scipy.stats import chisquare
@@ -236,3 +268,6 @@ if __name__ == "__main__":
         print("Fail to reject H_0: distribution is consistent with uniform")
 
     plt.savefig("led_placer.png")
+
+    print("Testing old vs new truncated Poisson...")
+    test_truncated_equals_old_reject()
