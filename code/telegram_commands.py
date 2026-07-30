@@ -63,6 +63,21 @@ class GiveIp(TelegramCommandBase):
             log.error("Telegram give_ip", exception=traceback.format_exc())
 
 
+class TestAlarm(TelegramCommandBase):
+    """/test_alarm -> send a repeating alarm, to check the acknowledge flow."""
+
+    command = "test_alarm"
+
+    async def handler(self, update: Update,
+                      context: ContextTypes.DEFAULT_TYPE) -> None:
+        try:
+            log.alarm("Test alarm, acknowledge me", repeat=True)
+            pending = log.telegram_bot.pending
+            await update.message.reply_text(f"pending alarms: {len(pending)}")
+        except Exception:
+            log.error("Telegram test_alarm", exception=traceback.format_exc())
+
+
 class RestartAnydesk(TelegramCommandBase):
     """/restart_anydesk -> restart the AnyDesk service on the Pi."""
 
