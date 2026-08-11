@@ -20,15 +20,29 @@ class TrainingProtocol(TrainingProtocolBase):
         LEDs always on. No progressive difficulty.
         Advance: rolling acc >=80% AND side bias <=10% over acc_window trials.
 
-    Stage 2: +mu_nr --> learn to deal with tower density distractors
+    Stage 2: +dead_zone --> progressively widen the end dead-zone
+        mu_r=8.4, mu_nr=0.0 (still one-sided, same as S1), LEDs always on,
+        uncued (S1's light_intensity staircase has already faded the cue to
+        0 by the time a mouse gets here). Kaernbach staircase increases
+        end_dead_zone_cm, the region near the far end of the strip where no
+        tower can be placed (see LEDpicker.py).
+        Start: end_dead_zone_cm=0. Target: end_dead_zone_cm>=25.
+        delta_up=0.5cm, p*=75% so delta_down=1.5cm (3:1 ratio), cap
+        delta_max=5cm. Run-length escalation as the other staircases,
+        r=1.5. No warmup (mirrors S1).
+        Advance: rolling acc >=75% AND end_dead_zone_cm>=25 over acc_window
+        trials. Once graduated, end_dead_zone_cm stays fixed at 25cm for
+        every later stage (same carry-forward pattern as mu_nr/led_ms).
+
+    Stage 3: +mu_nr --> learn to deal with tower density distractors
         mu_r=8.4, LEDs always on. Kaernbach staircase increases mu_nr.
         Start: mu_nr=0. Target: mu_nr>=1.6 (paper eases mu_r 8.4->8.0 across
         T7->T9, but I hold mu_r=8.4 since the difference is negligible).
         delta_up=0.0025, delta_down=0.0075 (3:1 ratio -> p*=75%).
         Run-length escalation: step * r^(n-1), r=1.5, cap delta_max=0.025.
         Starting here, each session starts with a warmup phase with mu_nr=0
-        (one-sided easy trials). Stage 2 uses a longer/looser gate (paper T8):
-        warmup_min_trials=20 at >=80% correct, bias <=10%; stages 3-5 use 10
+        (one-sided easy trials). Stage 3 uses a longer/looser gate (paper T8):
+        warmup_min_trials=20 at >=80% correct, bias <=10%; stages 4-6 use 10
         trials at >=85%. All per-stage in STAGES. Then main phase begins.
         Onset multiplier M*exp(-t/tau)+1 (M=4.0, tau=10) is applied to the
         first onset_boost_trials (30) main-phase trials, then decays to 1.
@@ -36,20 +50,20 @@ class TrainingProtocol(TrainingProtocolBase):
         Easy block (rescue): if rolling acc <65%, next 10 trials run mu_nr=0.
         Advance: rolling acc >=75% AND mu_nr>=1.6 over acc_window trials.
 
-    Stage 3: -LED_ms --> learn to deal with timed LED cues
-        mu_r=8.0, mu_nr fixed at 1.6 (S2 final value, paper T9). LEDs timed:
+    Stage 4: -LED_ms --> learn to deal with timed LED cues
+        mu_r=8.0, mu_nr fixed at 1.6 (S3 final value, paper T9). LEDs timed:
         each LED fires for led_ms then turns off. Staircase drives led_ms down.
         Warmup and easy-block trials stay untimed (always-on; paper T4/T7).
         Start: led_ms=5000.
-        Target: led_ms<=200 (min_tower_duration).
+        Target: led_ms<=100 (min_tower_duration).
         delta_up=10ms, p*=70% so delta_down=23.3ms (2.33:1), cap at 100ms.
-        Run-length escalation as S2; warmup gate 10 trials at >=85%.
+        Run-length escalation as S3; warmup gate 10 trials at >=85%.
         Easy block (rescue): if rolling acc <60%, next 10 trials run mu_nr=0.
         Advance: rolling acc >=70% AND led_ms<=min_tower_duration.
 
-    Stage 4: +mu_nr_short --> increase density at short LED (paper T10 -> T11)
-        mu_r=7.7, timed LEDs fixed at min_tower_duration (200ms).
-        Staircase drives mu_nr up (same step sizes as S2 but p*=70%, so
+    Stage 5: +mu_nr_short --> increase density at short LED (paper T10 -> T11)
+        mu_r=7.7, timed LEDs fixed at min_tower_duration (100ms).
+        Staircase drives mu_nr up (same step sizes as S3 but p*=70%, so
         delta_down=delta_up*0.70/0.30). Warmup/easy trials untimed; warmup
         gate 10 trials at >=85%.
         Start: mu_nr=1.6.
@@ -57,16 +71,16 @@ class TrainingProtocol(TrainingProtocolBase):
         Easy block (rescue): if rolling acc <60%, next 10 trials run mu_nr=0.
         Advance: rolling acc >=70% AND mu_nr>=2.3 over acc_window trials.
 
-    Stage 5: Final --> paper T11
-        mu_r=7.7, mu_nr=2.3 fixed, led_ms=200ms fixed. LEDs timed.
+    Stage 6: Final --> paper T11
+        mu_r=7.7, mu_nr=2.3 fixed, led_ms=100ms fixed. LEDs timed.
         No staircase. Easy block (rescue): if rolling acc drops below 55%, next
         rescue_block_size (10) trials run mu_nr=0 (untimed) before returning to
         full difficulty.
         No advancement criterion.
 
     Staircase equilibrium (per stage):
-        Each staircase converges to its target_acc p* (S2 0.75, S3/S4 0.70),
-        set per-stage in STAGES; delta_down = delta_up * p*/(1-p*).
+        Each staircase converges to its target_acc p* (S2/S3 0.75, S4/S5
+        0.70), set per-stage in STAGES; delta_down = delta_up * p*/(1-p*).
     """
 
     def __init__(self) -> None:
@@ -89,6 +103,7 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.last_mu_nr = 0.0
         self.settings.last_led_ms = 5000
         self.settings.last_light_intensity = 255
+        self.settings.last_dead_zone_cm = 0.0
         self.settings.last_perf_window = []
 
         # Stage 0 now has two steps: first with ROI proximity triggers (the
@@ -151,17 +166,22 @@ class TrainingProtocol(TrainingProtocolBase):
         # Stage 3 staircase parameters (ms scale), same idea, but we go down
         self.settings.staircase_delta_up_ms = 10  # ms per correct
         self.settings.staircase_delta_max_ms = 100  # ms, max step size
-        self.settings.min_tower_duration = 200  # ms, led ms target
+        self.settings.min_tower_duration = 100  # ms, led ms target
 
         # Stage 1 cue-fade staircase (PWM scale 0-255), goes down to 0
         self.settings.staircase_delta_up_intensity = 5  # PWM per correct
         self.settings.staircase_delta_max_intensity = 50  # PWM, max step
 
+        # Stage 2 dead-zone staircase (cm scale), goes up to 25cm.
+        # TODO: Could be in LedPicker.LED_SPACING units?
+        self.settings.staircase_delta_up_deadzone = 0.5  # cm per correct
+        self.settings.staircase_delta_max_deadzone = 5.0  # cm, max step
+
         # Task geometry
         self.settings.led_start_dead_zone_cm = 10
         self.settings.acc_window = 40  # rolling accuracy window (trials)
         self.settings.warmup_bias_window = 20  # trials
-        self.settings.rescue_enabled = True
+        self.settings.rescue_enabled = False
         self.settings.rescue_block_size = 10
         self.settings.resume_from_last = True  # resume last session difficulty
 
@@ -171,9 +191,9 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.reward_effort_delta_easy = 6.0  # delta with no bonus
         self.settings.reward_jackpot_mult = 10.0
         self.settings.reward_jackpot_prob = 0.1  # of correct trials
-        self.settings.small_reward_amount_ul = 2.5  # µl, port 2
-        self.settings.big_reward_amount_ul = 5  # µl, port 1/3
-        self.settings.jackpot_reward_amount_ul = 50  # µl, port 1/3
+        self.settings.small_reward_amount_ul = 1.0  # µl, port 2
+        self.settings.big_reward_amount_ul = 3.0  # µl, port 1/3
+        self.settings.jackpot_reward_amount_ul = 30  # µl, port 1/3
 
         # Input/output settings
         self.settings.light_intensity_high = 255  # bright cue (port 2, S1 max)
@@ -267,6 +287,8 @@ class TrainingProtocol(TrainingProtocolBase):
             mu_src = main.iloc[-1] if not main.empty else last_row
             self.settings.last_mu_nr = float(mu_src.get("mu_nr", 0.0))
             self.settings.last_led_ms = int(mu_src.get("led_ms", 5000))
+            self.settings.last_dead_zone_cm = float(
+                mu_src.get("led_end_dead_zone_cm", 0.0))
             # Carry the rolling accuracy window across sessions so graduation
             # isn't gated on filling acc_window main trials in one sitting.
             stage_main = main[main["stage"] == restored]
@@ -307,10 +329,12 @@ class TrainingProtocol(TrainingProtocolBase):
                 "staircase_delta_up",
                 "staircase_delta_up_ms",
                 "staircase_delta_up_intensity",
+                "staircase_delta_up_deadzone",
                 "staircase_r",
                 "staircase_delta_max",
                 "staircase_delta_max_ms",
                 "staircase_delta_max_intensity",
+                "staircase_delta_max_deadzone",
                 "staircase_M",
                 "staircase_tau",
                 "onset_boost_trials",

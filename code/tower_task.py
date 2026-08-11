@@ -107,7 +107,14 @@ class TowersTask(TowersTaskBase):
             cue_lbl = ("Cue:", f" {cue}/{cfg.staircase.target}",
                        cue <= cfg.staircase.target + tol)
             adv_label = [acc_lbl, bias_lbl, cue_lbl]
-        elif stage in (2, 4):
+        elif stage == 2:
+            tol = cfg.staircase.grad_tol(self.settings)
+            acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
+            dz = self._odc.difficulty.end_dead_zone_cm
+            dz_lbl = ("DeadZone:", f" {dz:.1f}/{cfg.staircase.target:.1f}cm",
+                      dz >= cfg.staircase.target - tol)
+            adv_label = [acc_lbl, dz_lbl]
+        elif stage in (3, 5):
             tol = cfg.staircase.grad_tol(self.settings)
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             mu_nr_lbl = ("mu_nr:", (f" {self._odc.difficulty.mu_nr:.3f}/"
@@ -115,7 +122,7 @@ class TowersTask(TowersTaskBase):
                          self._odc.difficulty.mu_nr
                          >= cfg.staircase.target - tol)
             adv_label = [acc_lbl, mu_nr_lbl]
-        elif stage == 3:
+        elif stage == 4:
             tol = cfg.staircase.grad_tol(self.settings)
             acc_lbl = ("Acc:", f" {acc_pct}/{thr_pct}%", acc_ok)
             led_ms_lbl = ("LED ms:", (f" {self._odc.difficulty.led_ms:.0f}/"
@@ -124,7 +131,7 @@ class TowersTask(TowersTaskBase):
                           (self._odc.difficulty.led_ms <=
                           self.settings.min_tower_duration + tol))
             adv_label = [acc_lbl, led_ms_lbl]
-        elif stage == 5:
+        elif stage == 6:
             adv_label = [("", "  Final stage", True)]
         else:
             adv_label = [("", "  Done", True)]
@@ -157,6 +164,7 @@ class TowersTask(TowersTaskBase):
             pass  # no LEDs in S0
         else:
             self.led_picker.update_mu(diff.mu_r, diff.mu_nr)
+            self.led_picker.update_dead_zone(diff.end_dead_zone_cm)
 
         self.settings.stage = stage
         self.settings.checkpoint = self._odc.checkpoint
@@ -196,6 +204,8 @@ class TowersTask(TowersTaskBase):
             if cfg.staircase.variable != "none" and self._odc.phase == "main":
                 self.led_picker.update_mu(self._odc.difficulty.mu_r,
                                           self._odc.difficulty.mu_nr)
+                self.led_picker.update_dead_zone(
+                    self._odc.difficulty.end_dead_zone_cm)
 
     def set_ui_settings(self):
         settings.set("AREA1_BOX", [55, 225, 585, 265, 65])
@@ -241,7 +251,8 @@ class TowersTask(TowersTaskBase):
         self._reward_policy = RewardPolicy.from_settings(self.settings)
         self.led_picker = LedPicker(
             rwd_density=0.0, no_rwd_density=0.0,
-            start_dead_zone_cm=self.settings.led_start_dead_zone_cm)
+            start_dead_zone_cm=self.settings.led_start_dead_zone_cm,
+            end_dead_zone_cm=self._odc.difficulty.end_dead_zone_cm)
         self._apply_stage(self._odc.stage)
         if self._odc.phase == "warmup":
             self.led_picker.update_mu(self._odc.difficulty.mu_r, 0.0)
@@ -349,7 +360,7 @@ class TowersTask(TowersTaskBase):
                 - len(self._this_trial_leds[other]))
 
     def _softcode_callback_always_on(self):
-        """Light all trial LEDs at once and leave them on (stages 1-2)."""
+        """Light all trial LEDs at once and leave them on (stages 1-3)."""
         if not self.available_leds_idx:
             return
         leds = list(self.available_leds_idx)
@@ -368,7 +379,7 @@ class TowersTask(TowersTaskBase):
         self._publish_led_pos()
 
     def _softcode_callback_proximity(self):
-        """Trigger LEDs one by one as animal passes them (stages 3-4)."""
+        """Trigger LEDs one by one as animal passes them (stages 4-5)."""
         # If no LED triggers, do nothing
         if not self.led_triggers:
             return
@@ -597,6 +608,10 @@ class TowersTask(TowersTaskBase):
         # LED picker info
         self.register_value("rwd_density", self.led_picker.mu_reward)
         self.register_value("no_rwd_density", self.led_picker.mu_no_reward)
+        self.register_value("led_start_dead_zone_cm",
+                            self.led_picker.start_dead_zone_cm)
+        self.register_value("led_end_dead_zone_cm",
+                            self.led_picker.end_dead_zone_cm)
 
         # Left or Right trial info
         self.register_value("pR", self.left_or_right.current_PR)

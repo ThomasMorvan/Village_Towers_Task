@@ -299,6 +299,8 @@ class AutoNoMouse(AutoNoMouseBase):
             "trial_correct": correct,
             "rwd_density": task.led_picker.mu_reward,
             "no_rwd_density": task.led_picker.mu_no_reward,
+            "led_start_dead_zone_cm": task.led_picker.start_dead_zone_cm,
+            "led_end_dead_zone_cm": task.led_picker.end_dead_zone_cm,
             "pR": pR,
             "empR": empR,
             "draw_side": draw_side,

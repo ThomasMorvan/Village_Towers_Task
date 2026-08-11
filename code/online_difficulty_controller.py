@@ -3,6 +3,8 @@ from dataclasses import dataclass
 import numpy as np
 
 from task_stages import STAGES, MAX_STAGE, Difficulty
+# TODO: each stage should have it's start() and check_checkpoint() methods,
+# to avoid the proliferation of if self.stage == N: blocks here.
 
 
 @dataclass
@@ -183,23 +185,23 @@ class OnlineDifficultyController:
         floor = self.checkpoint_floor
         resume = bool(getattr(settings, "resume_from_last", True))
         mu_r = STAGES[self.stage].rwd_density
-        min_ms = int(getattr(settings, "min_tower_duration", 200))
-        if self.stage in (2, 4):
+        min_ms = int(getattr(settings, "min_tower_duration", 100))
+        if self.stage in (3, 5):
             sc = STAGES[self.stage].staircase
             last = (float(getattr(settings, "last_mu_nr", floor)) if resume
                     else floor)
-            led_ms = 5000 if self.stage == 2 else min_ms
+            led_ms = 5000 if self.stage == 3 else min_ms
             mu_nr = min(max(last, floor), sc.target)
             self.difficulty = Difficulty(mu_r=mu_r, mu_nr=mu_nr, led_ms=led_ms)
-        elif self.stage == 3:
+        elif self.stage == 4:
             last_ms = (int(getattr(settings, "last_led_ms", 5000)) if resume
                        else 5000)
             self.difficulty = Difficulty(mu_r=mu_r,
-                                         mu_nr=STAGES[3].no_rwd_density,
+                                         mu_nr=STAGES[4].no_rwd_density,
                                          led_ms=last_ms if last_ms else 5000)
-        elif self.stage == 5:
+        elif self.stage == 6:
             self.difficulty = Difficulty(mu_r=mu_r,
-                                         mu_nr=STAGES[5].no_rwd_density,
+                                         mu_nr=STAGES[6].no_rwd_density,
                                          led_ms=min_ms)
         else:
             self.difficulty = Difficulty(mu_r=mu_r)
@@ -211,6 +213,18 @@ class OnlineDifficultyController:
                 getattr(settings, "last_light_intensity", li_max))
         else:
             self.difficulty.light_intensity = li_max
+
+        # Dead-zone geometry (S2 staircase target, carried forward after S2).
+        dz_target = STAGES[2].staircase.target  # 25.0 cm, fully graduated
+        if self.stage < 2:
+            self.difficulty.end_dead_zone_cm = 0.0
+        elif self.stage == 2:
+            last_dz = (float(getattr(settings, "last_dead_zone_cm", floor))
+                       if resume else floor)
+            self.difficulty.end_dead_zone_cm = min(max(last_dz, floor),
+                                                   dz_target)
+        else:
+            self.difficulty.end_dead_zone_cm = dz_target
 
         self._streak = 0
         self._perf_window = deque(maxlen=int(settings.acc_window))
@@ -298,15 +312,22 @@ class OnlineDifficultyController:
         prev = self.difficulty
         mu_r = STAGES[to_stage].rwd_density
 
-        if to_stage == 3:
-            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=prev.mu_nr,
-                                         led_ms=int(new_start))
-        elif to_stage in (2, 4):
-            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=new_start,
-                                         led_ms=prev.led_ms)
+        if to_stage == 2:
+            self.difficulty = Difficulty(
+                mu_r=mu_r, mu_nr=prev.mu_nr, led_ms=prev.led_ms,
+                end_dead_zone_cm=new_start)
+        elif to_stage == 4:
+            self.difficulty = Difficulty(
+                mu_r=mu_r, mu_nr=prev.mu_nr, led_ms=int(new_start),
+                end_dead_zone_cm=prev.end_dead_zone_cm)
+        elif to_stage in (3, 5):
+            self.difficulty = Difficulty(
+                mu_r=mu_r, mu_nr=new_start, led_ms=prev.led_ms,
+                end_dead_zone_cm=prev.end_dead_zone_cm)
         else:
-            self.difficulty = Difficulty(mu_r=mu_r, mu_nr=prev.mu_nr,
-                                         led_ms=prev.led_ms)
+            self.difficulty = Difficulty(
+                mu_r=mu_r, mu_nr=prev.mu_nr, led_ms=prev.led_ms,
+                end_dead_zone_cm=prev.end_dead_zone_cm)
 
         self._streak = 0
         self._perf_window = deque(maxlen=int(settings.acc_window))
@@ -392,6 +413,16 @@ class OnlineDifficultyController:
                     self.difficulty.light_intensity + int(delta),
                     int(settings.light_intensity_high))
 
+        elif var == "dead_zone_cm":
+            if correct:
+                self.difficulty.end_dead_zone_cm = min(
+                    self.difficulty.end_dead_zone_cm + delta,
+                    cfg.staircase.target)
+            else:
+                self.difficulty.end_dead_zone_cm = max(
+                    self.difficulty.end_dead_zone_cm - delta,
+                    self.checkpoint_floor)
+
     def _check_checkpoint(self, settings) -> AdaptationEvent:
         if getattr(settings, "stage", 0) > MAX_STAGE:
             return AdaptationEvent()
@@ -404,17 +435,24 @@ class OnlineDifficultyController:
 
         if (self.stage == 2
                 and rolling_acc >= cfg.advance_threshold
-                and self.difficulty.mu_nr >= cfg.staircase.target - tol):
+                and self.difficulty.end_dead_zone_cm
+                >= cfg.staircase.target - tol):
             return self._pass_checkpoint(to_stage=3, settings=settings)
 
         if (self.stage == 3
                 and rolling_acc >= cfg.advance_threshold
-                and self.difficulty.led_ms <= settings.min_tower_duration + tol):
+                and self.difficulty.mu_nr >= cfg.staircase.target - tol):
             return self._pass_checkpoint(to_stage=4, settings=settings)
 
         if (self.stage == 4
                 and rolling_acc >= cfg.advance_threshold
-                and self.difficulty.mu_nr >= cfg.staircase.target - tol):
+                and self.difficulty.led_ms
+                <= settings.min_tower_duration + tol):
             return self._pass_checkpoint(to_stage=5, settings=settings)
+
+        if (self.stage == 5
+                and rolling_acc >= cfg.advance_threshold
+                and self.difficulty.mu_nr >= cfg.staircase.target - tol):
+            return self._pass_checkpoint(to_stage=6, settings=settings)
 
         return AdaptationEvent()

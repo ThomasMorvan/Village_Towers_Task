@@ -15,6 +15,7 @@ class Difficulty:
     mu_nr: float = 0.0  # non-rewarded tower density (m^-1)
     led_ms: int = 5000  # LED on-duration (ms)
     light_intensity: int = 255  # S1 visual cue PWM (ports 1/3), fades 255->0
+    end_dead_zone_cm: float = 0.0  # ramps 0->target in S2, fixed after
 
 
 @dataclass(frozen=True)
@@ -22,7 +23,7 @@ class Staircase:
     """Encapsulates one Kaernbach adaptive staircase.
 
     variable: column driven ("none" | "minority_density" | "tower_duration"
-              | "light_intensity")
+              | "light_intensity" | "dead_zone_cm")
     start: initial value when stage is entered
     target: convergence target (e.g. mu_nr >= 1.6)
     harder_direction: "up" (mu_nr increases) | "down" (led_ms decreases)
@@ -62,6 +63,9 @@ class Staircase:
         elif self.variable == "light_intensity":
             delta_up = settings.staircase_delta_up_intensity
             delta_max = settings.staircase_delta_max_intensity
+        elif self.variable == "dead_zone_cm":
+            delta_up = settings.staircase_delta_up_deadzone
+            delta_max = settings.staircase_delta_max_deadzone
         else:
             delta_up = settings.staircase_delta_up
             delta_max = settings.staircase_delta_max
@@ -80,6 +84,7 @@ class Staircase:
         name, default = {
             "tower_duration":  ("staircase_delta_up_ms", 10.0),
             "light_intensity": ("staircase_delta_up_intensity", 5.0),
+            "dead_zone_cm":    ("staircase_delta_up_deadzone", 0.5),
         }.get(self.variable, ("staircase_delta_up", 0.0025))
         step = float(getattr(settings, name, default))
         if size is None:
@@ -131,7 +136,16 @@ STAGES: dict[int, StageConfig] = {
         color="lawngreen", advance_threshold=0.80,
         policy=StagePolicy(jackpot=True)),
     2: StageConfig(
-        stage=2, name="+mu_nr", rwd_density=8.4, no_rwd_density=0.0,
+        stage=2, name="+dead_zone", rwd_density=8.4,
+        no_rwd_density=0.0, trial_is_cued=False,
+        give_free_reward=True, both_sides_rewarded=False,
+        staircases=(Staircase(variable="dead_zone_cm",
+                              start=0.0, target=25.0,
+                              harder_direction="up", target_acc=0.75),),
+        color="deepskyblue", advance_threshold=0.75,
+        policy=StagePolicy(jackpot=True)),
+    3: StageConfig(
+        stage=3, name="+mu_nr", rwd_density=8.4, no_rwd_density=0.0,
         trial_is_cued=False, give_free_reward=True,
         both_sides_rewarded=False,
         staircases=(Staircase(variable="minority_density",
@@ -141,19 +155,19 @@ STAGES: dict[int, StageConfig] = {
         warmup_min_trials=20, warmup_acc_threshold=0.80,
         warmup_bias_threshold=0.10, rescue_threshold=0.65,
         policy=StagePolicy(jackpot=True)),
-    3: StageConfig(
-        stage=3, name="-LED_ms", rwd_density=8.0,
+    4: StageConfig(
+        stage=4, name="-LED_ms", rwd_density=8.0,
         no_rwd_density=1.6, trial_is_cued=False,
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(Staircase(variable="tower_duration",
-                              start=5000.0, target=200.0,
+                              start=5000.0, target=100.0,
                               harder_direction="down", target_acc=0.70),),
         color="royalblue", advance_threshold=0.70, timed_leds=True,
         has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
         warmup_bias_threshold=0.10, rescue_threshold=0.60,
         policy=StagePolicy(jackpot=True)),
-    4: StageConfig(
-        stage=4, name="+mu_nr_short", rwd_density=7.7,
+    5: StageConfig(
+        stage=5, name="+mu_nr_short", rwd_density=7.7,
         no_rwd_density=1.6, trial_is_cued=False,
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(Staircase(variable="minority_density",
@@ -163,8 +177,8 @@ STAGES: dict[int, StageConfig] = {
         has_warmup=True, warmup_min_trials=10, warmup_acc_threshold=0.85,
         warmup_bias_threshold=0.10, rescue_threshold=0.60,
         policy=StagePolicy(jackpot=True)),
-    5: StageConfig(
-        stage=5, name="Final", rwd_density=7.7,
+    6: StageConfig(
+        stage=6, name="Final", rwd_density=7.7,
         no_rwd_density=2.3, trial_is_cued=False,
         give_free_reward=True, both_sides_rewarded=False,
         staircases=(),
@@ -174,10 +188,10 @@ STAGES: dict[int, StageConfig] = {
 }
 
 MIN_STAGE = 0
-MAX_STAGE = 5
+MAX_STAGE = 6
 
-CHECKPOINT_COLORS = ["darkviolet", "darkgreen", "midnightblue", "goldenrod",
-                     "sienna"]
+CHECKPOINT_COLORS = ["darkviolet", "darkgreen", "teal", "midnightblue",
+                     "goldenrod", "sienna"]
 
 PHASE_BGR: dict[str, tuple[int, int, int]] = {
     "warmup": (0, 220, 220),
