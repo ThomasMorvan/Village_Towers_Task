@@ -225,6 +225,9 @@ class DrawFurthestX(CameraDrawBase):
     def draw(self, cam: Camera) -> None:
         """cv2 overlays burned into the recorded video"""
         super().draw(cam)
+        if cam.name == "CORRIDOR":  # FIXME delete
+            self._draw_shadow_comparison(cam)  # FIXME delete
+
         anm = cam.items_to_draw.get("auto_instance")
 
         hud = cam.items_to_draw.get("hud")
@@ -233,6 +236,23 @@ class DrawFurthestX(CameraDrawBase):
 
         if anm is not None and hasattr(anm, "acc"):
             self._draw_accumulator(cam.frame, anm)
+
+    def _draw_shadow_comparison(self, cam: Camera) -> None:  # FIXME delete
+        """Overlays old/new detection comparison for the corridor camera."""
+        new_masks = cam.items_to_draw.get("shadow_new_masks")
+        if not new_masks:
+            return
+        for i, new_mask in new_masks.items():
+            old_mask = cam.masks[i]
+            if not isinstance(old_mask, np.ndarray):
+                continue
+            x1, y1, x2, y2 = cam.areas[i]
+            roi = cam.frame[y1:y2, x1:x2]
+            old_fg = old_mask > 0
+            new_fg = new_mask > 0
+            roi[old_fg & ~new_fg] = (255, 0, 0)  # old only
+            roi[new_fg & ~old_fg] = (0, 255, 0)  # new only
+            roi[old_fg & new_fg] = (0, 0, 255)  # both agree
 
     def draw_preview(self, cam: Camera, painter: QPainter) -> None:
         """Live overlay (NOT saved to the video)"""
