@@ -1,4 +1,5 @@
 from __future__ import annotations
+import traceback
 from math import radians, cos, sin
 import cv2
 import numpy as np
@@ -226,7 +227,10 @@ class DrawFurthestX(CameraDrawBase):
         """cv2 overlays burned into the recorded video"""
         super().draw(cam)
         if cam.name == "CORRIDOR":  # FIXME delete
-            self._draw_shadow_comparison(cam)  # FIXME delete
+            try:
+                self._draw_shadow_comparison(cam)  # FIXME delete
+            except Exception:
+                traceback.print_exc()
 
         anm = cam.items_to_draw.get("auto_instance")
 
@@ -247,7 +251,10 @@ class DrawFurthestX(CameraDrawBase):
             if not isinstance(old_mask, np.ndarray):
                 continue
             x1, y1, x2, y2 = cam.areas[i]
-            roi = cam.frame[y1:y2, x1:x2]
+            roi = cam.frame[y1:y2, x1:x2, :3]
+            if (old_mask.shape != roi.shape[:2]
+                    or new_mask.shape != roi.shape[:2]):
+                continue
             old_fg = old_mask > 0
             new_fg = new_mask > 0
             roi[old_fg & ~new_fg] = (255, 0, 0)  # old only
