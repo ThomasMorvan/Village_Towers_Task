@@ -100,6 +100,11 @@ CONTROL_ROI = (300, 200, 360, 260)  # (x1, y1, x2, y2)
 CONTROL_TOLERANCE = 0.02  # relative brightness change that triggers a relevel
 STUCK_MINUTES = 120  # Max duration area continuously occupied before alarm
 
+# FIXME delete because cam.thresholds are tuned for the old method,
+# once we trust the new method, cam.thresholds will be used with UI values.
+DIFF_THRESHOLD = 50
+DIFF_THRESHOLD_NIGHT = 50
+
 
 class BackgroundSubtractor:
     """Background subtraction.
@@ -236,6 +241,8 @@ class CorridorDetection(CorridorDetectionBase):
         leak_every: int
         control_tolerance: float
         stuck_minutes: int
+        diff_threshold: int  # FIXME delete
+        diff_threshold_night: int  # FIXME delete
     Actions:
         Flush/Save/Delete the saved background with buttons in UI.
     """
@@ -263,7 +270,16 @@ class CorridorDetection(CorridorDetectionBase):
             "ever clearing --> an animal immobile in the corridor, or "
             "needs cleaning. To be kept well under the time it takes the "
             "background to absorb changes, so the alarm fires while the area "
-            "is still being reported occupied. 0 = no alarm.")]
+            "is still being reported occupied. 0 = no alarm."),
+        CustomDetectionParam(  # FIXME delete
+            "diff_threshold", int, DIFF_THRESHOLD,
+            "#New-method threshold (day)", 1, 255,
+            "Temporary params for the new detection method. "
+            "One value for all 4 areas."),
+        CustomDetectionParam(  # FIXME delete
+            "diff_threshold_night", int, DIFF_THRESHOLD_NIGHT,
+            "#New-method threshold (night)", 1, 255,
+            "Same for night.")]
 
     ACTIONS = ["flush", "save", "delete_save"]
 
@@ -272,7 +288,7 @@ class CorridorDetection(CorridorDetectionBase):
         self.subs: dict[int, BackgroundSubtractor] = {}
 
         for i in range(4):
-            # placeholder, overwritten every frame from cam.thresholds[i]
+            # placeholder, overwritten every frame from self.diff_threshold
             sub = BackgroundSubtractor(threshold=25)
             sub.load_background(self._save_path(i))
             self.subs[i] = sub
@@ -359,7 +375,9 @@ class CorridorDetection(CorridorDetectionBase):
                 # cam.counts[i] = -1  # FIXME add
                 continue
             sub = self.subs.setdefault(i, BackgroundSubtractor())
-            sub.threshold = cam.thresholds[i]  # get thresh from cam.
+            sub.threshold = (self.diff_threshold_night if cam.night  # FIXME
+                             else self.diff_threshold)  # FIXME delete
+            # sub.threshold = cam.thresholds[i]  # FIXME add
             sub.leak_every = int(self.leak_every)
             # which side of the pixel history the background is on
             sub.dark_subjects = Color is None or cam.color == Color.BLACK
