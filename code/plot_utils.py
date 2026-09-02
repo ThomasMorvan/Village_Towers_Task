@@ -83,6 +83,34 @@ WARMUP_BIAS_WINDOW = 20
 # Plotted position of "always-on" LED duration.
 LED_MS_INF = 5500
 
+# Staircase variable -> name of df column that logs it.
+STAIR_COL = {"minority_density":  "mu_nr",
+             "tower_duration":    "led_ms",
+             "light_intensity":   "light_intensity",
+             "dead_zone_cm":      "led_end_dead_zone_cm"}
+
+
+# Staircase variable -> (diagnostic row label, number format).
+STAIR_ROW = {"minority_density":  ("mu_nr", "f4"),
+             "tower_duration":    ("LED ms", "int"),
+             "light_intensity":   ("Cue intensity", "int"),
+             "dead_zone_cm":      ("Dead zone (cm)", "f1")}
+
+
+def stages_with(var):
+    """Stage numbers whose staircase drives `var`, in protocol order. Read
+    from STAGES so renumbering the protocol does not break the plots."""
+    return [s for s, c in sorted(STAGES.items())
+            if any(sc.variable == var for sc in c.staircases)]
+
+
+def _stage_rows(df, *variables):
+    """Rows of df run in a stage whose staircase drives one of `variables`."""
+    if "stage" not in df.columns:
+        return df
+    stages = [s for v in variables for s in stages_with(v)]
+    return df[df["stage"].isin(stages)]
+
 
 def animal_bias(df, window):
     """Side bias of the animal: |acc_right - acc_left| over the last window
@@ -272,16 +300,12 @@ def plot_staircase(df, ax, twin_ax=None):
     if not df_mu_nr.empty:
         _plot_broken(ax, df_mu_nr, "mu_nr", main_active, label=r"$\mu_{NR}$",
                      color=CFG["mu_nr_color"], lw=CFG["mu_nr_lw"])
-        ax.axhline(STAGES[2].staircase.target,
-                   color=CFG["mu_nr_color"],
-                   ls=CFG["target_ls"], lw=CFG["target_lw"],
-                   alpha=CFG["target_alpha"],
-                   label=f"S2 target {STAGES[2].staircase.target}")
-        ax.axhline(STAGES[4].staircase.target,
-                   color=CFG["mu_nr_color"],
-                   ls=":", lw=CFG["target_lw"],
-                   alpha=CFG["target_alpha"],
-                   label=f"S4 target {STAGES[4].staircase.target}")
+        for i, s in enumerate(stages_with("minority_density")):
+            tgt = STAGES[s].staircase.target
+            ax.axhline(tgt, color=CFG["mu_nr_color"],
+                       ls=CFG["target_ls"] if i == 0 else ":",
+                       lw=CFG["target_lw"], alpha=CFG["target_alpha"],
+                       label=f"S{s} target {tgt}")
 
     # Effective mu_nr per trial.
     if {"L LEDs", "R LEDs", "trial_side"} <= set(df.columns):
@@ -321,18 +345,19 @@ def plot_staircase(df, ax, twin_ax=None):
             timed.loc[df_led.index], LED_MS_INF)
         _plot_broken(ax2, df_led, "_ledplot", timed, label="led_ms",
                      color=CFG["led_color"], lw=CFG["led_lw"])
-        ax2.axhline(STAGES[3].staircase.target,
-                    color=CFG["led_color"],
-                    ls=CFG["target_ls"], lw=CFG["target_lw"],
-                    alpha=CFG["target_alpha"],
-                    label=f"led_ms target {STAGES[3].staircase.target:.0f}")
+        for s in stages_with("tower_duration"):
+            tgt = STAGES[s].staircase.target
+            ax2.axhline(tgt, color=CFG["led_color"],
+                        ls=CFG["target_ls"], lw=CFG["target_lw"],
+                        alpha=CFG["target_alpha"],
+                        label=f"led_ms target {tgt:.0f}")
 
     if "checkpoint_floor" in df.columns:
         floor = df["checkpoint_floor"].dropna()
         if len(floor) and floor.iloc[-1] > 0:
             cur_stage = (int(df["stage"].iloc[-1]) if "stage" in df.columns
                          else 0)
-            if cur_stage == 3:
+            if cur_stage in stages_with("tower_duration"):
                 ax2.axhline(floor.iloc[-1], color=CFG["floor_color"],
                             ls=CFG["floor_ls"], lw=CFG["floor_lw"],
                             alpha=CFG["floor_alpha"])
@@ -537,7 +562,8 @@ def _step_bars(ax, sub_df, boost_series, ok_color, err_color, width=1.0):
 
 def plot_step(df, ax, twin_ax=None, cue_twin_ax=None):
     """Step size per trial.
-    Left axis: density steps (S2/S4). Right axis: ms steps (S3, ms).
+    Left axis: mu_nr density steps. Right axis: led_ms steps. Outer axis:
+    cue-intensity (PWM) and dead-zone (cm) steps, which never share a stage.
     Bars split into base step + gold stacked top for boost contribution.
     Twin axes to avoid scale clash."""
     if "step_delta" not in df.columns:
@@ -556,28 +582,30 @@ def plot_step(df, ax, twin_ax=None, cue_twin_ax=None):
 
     w = _dx(df["trial"])
     boost = df["step_boost"] if "step_boost" in df.columns else None
-    df_dens = df[df["stage"].isin([2, 4])] if "stage" in df.columns else df
+    df_dens = _stage_rows(df, "minority_density")
     _step_bars(ax, df_dens,
                boost if boost is not None else df_dens["step_delta"],
                CFG["streak_ok"], CFG["streak_err"], width=w)
 
-    df_ms = df[df["stage"] == 3] if "stage" in df.columns else pd.DataFrame()
+    df_ms = _stage_rows(df, "tower_duration")
     _step_bars(ax2, df_ms,
                (boost if boost is not None
                 else df_ms["step_delta"] if not df_ms.empty
                 else pd.Series(dtype=float)),
                CFG["led_color"], "darkorange", width=w)
 
-    df_cue = df[df["stage"] == 1] if "stage" in df.columns else pd.DataFrame()
+    df_cue = _stage_rows(df, "light_intensity", "dead_zone_cm")
     if not df_cue.empty:
+        first = STAGES.get(int(df_cue["stage"].iloc[0]))
+        color = first.color if first else "darkgreen"
         ax3 = cue_twin_ax if cue_twin_ax is not None else ax.twinx()
         ax3.spines["right"].set_position(("axes", 1.10))
         ax3.set_visible(True)
         _step_bars(ax3, df_cue,
                    boost if boost is not None else df_cue["step_delta"],
-                   STAGES[1].color, "darkgreen", width=w)
-        ax3.set_ylabel("Δ cue intensity (PWM)", color=STAGES[1].color)
-        ax3.tick_params(axis="y", labelcolor=STAGES[1].color)
+                   color, "darkgreen", width=w)
+        ax3.set_ylabel("Δ cue PWM / dead zone (cm)", color=color)
+        ax3.tick_params(axis="y", labelcolor=color)
 
     ax.set_ylabel("Step size", color=CFG["mu_nr_color"])
     ax2.set_ylabel("Δ led_ms (ms)", color=CFG["led_color"])
@@ -671,31 +699,19 @@ def _advance_criteria(df, window, settings=None):
 
     if cur == 0:
         rows = [("Trials", len(df), 40, 0, False, "int", 0.0)]
-    elif cur == 1:
-        empr = last("empR")
-        bias = abs(empr - 0.5) if not np.isnan(empr) and empr >= 0 \
-            else bias_of(seg)
-        rows = [
-            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
-             "pct", 0.0),
-            ("Bias", bias, BIAS_TARGET, 0.5, True, "pct", 0.0),
-            ("Cue intensity", last("light_intensity"), cfg.staircase.target,
-             cfg.staircase.start, True, "int", step),
-        ]
-    elif cur in (2, 4):
-        rows = [
-            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
-             "pct", 0.0),
-            ("mu_nr", last("mu_nr"), cfg.staircase.target,
-             cfg.staircase.start, False, "f4", step),
-        ]
-    elif cur == 3:
-        rows = [
-            ("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
-             "pct", 0.0),
-            ("LED ms", last("led_ms"), cfg.staircase.target,
-             cfg.staircase.start, True, "int", step),
-        ]
+    elif cfg is not None and cfg.advance_threshold > 0:
+        rows = [("Accuracy", rolling_acc, cfg.advance_threshold, 0.0, False,
+                 "pct", 0.0)]
+        if cfg.trial_is_cued:
+            empr = last("empR")
+            bias = abs(empr - 0.5) if not np.isnan(empr) and empr >= 0 \
+                else bias_of(seg)
+            rows.append(("Bias", bias, BIAS_TARGET, 0.5, True, "pct", 0.0))
+        sc = cfg.staircase
+        label, kind = STAIR_ROW.get(sc.variable, (None, None))
+        if label is not None:
+            rows.append((label, last(STAIR_COL[sc.variable]), sc.target,
+                         sc.start, sc.harder_direction == "down", kind, step))
     name = cfg.name if cfg else "?"
     return f"S{cur} {name} → advance", rows
 
@@ -719,7 +735,7 @@ def plot_stage_diagnostic(df, ax, window=40, settings=None):
         if v is None or (isinstance(v, float) and np.isnan(v)):
             return "?"
         return {"pct": f"{v * 100:.0f}%", "int": f"{v:.0f}",
-                "f4": f"{v:.4f}"}.get(kind, str(v))
+                "f1": f"{v:.1f}", "f4": f"{v:.4f}"}.get(kind, str(v))
 
     names = []
     for i, (name, val, target, start, lower, kind, tol) in enumerate(rows):
@@ -754,7 +770,7 @@ def plot_psychometric(df, ax):
     df_main = df_main.dropna(subset=["delta_towers", "trial_correct"]).copy()
 
     if df_main.empty:
-        ax.text(0.5, 0.5, "No main-phase data (stages 1--3)",
+        ax.text(0.5, 0.5, "No main-phase data",
                 ha="center", va="center", transform=ax.transAxes)
         return
 
@@ -804,8 +820,8 @@ def plot_stage_progression(df, ax):
             color="steelblue", label="Start stage", ms=CFG["subj_ms"])
     ax.plot(stage_info["session"], stage_info["last"], "s--",
             color="darkorange", label="End stage", ms=CFG["subj_ms"])
-    ax.set_yticks(range(0, len(STAGES)))
-    ax.set_yticklabels([f"{s}] {STAGES[s].name}" for s in range(len(STAGES))])
+    ax.set_yticks(sorted(STAGES))
+    ax.set_yticklabels([f"{s}] {STAGES[s].name}" for s in sorted(STAGES)])
     ax.set_ylabel("Stage")
     ax.set_xlabel("Session")
     ax.legend(fontsize=CFG["fs_label"], loc="upper left")
@@ -813,8 +829,9 @@ def plot_stage_progression(df, ax):
 
 def plot_difficulty_progression(df, ax):
     """Per-session staircase progress for every difficulty variable: mu_nr
-    (S2/S4, left axis), led_ms (S3, right axis) and cue light_intensity
-    (S1, outer right axis). Median dot per session plus a faint full trace."""
+    (left axis), led_ms (right axis), cue light_intensity and end dead zone
+    (outer right axes). Which stage drives which variable is read from
+    STAGES. Median dot per session plus a faint full trace."""
     df_main = (df[df["phase"] == "main"].copy() if "phase" in df.columns
                else df.copy())
     if df_main.empty:
@@ -845,14 +862,20 @@ def plot_difficulty_progression(df, ax):
         axx.plot(sess.index, sess.values, marker + ls, color=color,
                  label=f"S{stage} {var}", ms=CFG["subj_ms"], lw=CFG["subj_lw"])
 
-    ax2 = ax.twinx()                                   # led_ms (S3)
-    ax3 = ax.twinx()                                   # cue intensity (S1)
+    ax2 = ax.twinx()                                   # led_ms
+    ax3 = ax.twinx()                                   # cue intensity
+    ax4 = ax.twinx()                                   # end dead zone (cm)
     ax3.spines["right"].set_position(("outward", 48))
+    ax4.spines["right"].set_position(("outward", 96))
 
-    _plot(ax, 2, "mu_nr", "o")
-    _plot(ax, 4, "mu_nr", "^")
-    _plot(ax2, 3, "led_ms", "s", ls="--")
-    _plot(ax3, 1, "light_intensity", "D", ls=":")
+    for i, st in enumerate(stages_with("minority_density")):
+        _plot(ax, st, "mu_nr", "o^sv"[i % 4])
+    for st in stages_with("tower_duration"):
+        _plot(ax2, st, "led_ms", "s", ls="--")
+    for st in stages_with("light_intensity"):
+        _plot(ax3, st, "light_intensity", "D", ls=":")
+    for st in stages_with("dead_zone_cm"):
+        _plot(ax4, st, STAIR_COL["dead_zone_cm"], "v", ls="-.")
 
     sessions = sorted(df_main["session"].dropna().unique())
     for s in sessions:
@@ -863,77 +886,72 @@ def plot_difficulty_progression(df, ax):
     ax.set_ylabel("mu_nr", color="steelblue")
     ax2.set_ylabel("led_ms (ms)", color=CFG["led_color"])
     ax3.set_ylabel("cue intensity", color="darkgreen")
+    ax4.set_ylabel("dead zone (cm)", color="deepskyblue")
     ax.set_xlabel("Session")
-    handles = [hdl for a in (ax, ax2, ax3)
+    handles = [hdl for a in (ax, ax2, ax3, ax4)
                for hdl in a.get_legend_handles_labels()[0]]
-    labels = [lbl for a in (ax, ax2, ax3)
+    labels = [lbl for a in (ax, ax2, ax3, ax4)
               for lbl in a.get_legend_handles_labels()[1]]
     ax.legend(handles, labels, fontsize=CFG["fs_label"], loc="upper left")
 
 
-def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
-    """Synthetic session df covering stages 0-5."""
+def demo_df(n: int = 350, seed: int = 42) -> pd.DataFrame:
+    """Synthetic session df walking through every stage of STAGES, each stage
+    ramping its own staircase variable start -> target. Built from STAGES so
+    it follows protocol renumbering."""
     rng = np.random.default_rng(seed)
 
+    stages = sorted(STAGES)
+    edges = np.linspace(0, n, len(stages) + 1).astype(int)
+    blocks = list(zip(stages, edges[:-1], edges[1:]))
+
     stage_arr = np.zeros(n, dtype=int)
-    stage_arr[50:130] = 1
-    stage_arr[130:200] = 2
-    stage_arr[200:240] = 3
-    stage_arr[240:270] = 4
-    stage_arr[270:] = 5
+    phase_arr = np.array(["main"] * n, dtype=object)
+    mu_r = np.zeros(n)
+    floor_arr = np.zeros(n)
+    step_delta_arr = np.zeros(n)
+    step_boost_arr = np.ones(n)
+    cols = {c: np.zeros(n) for c in STAIR_COL.values()}
+    held = {"mu_nr": 0.0, "led_ms": 5000.0, "light_intensity": 255.0,
+            "led_end_dead_zone_cm": 0.0}
+    _M, _tau, _nb = 4.0, 10.0, 30  # onset boost
 
-    phase_arr = []
-    for i in range(n):
-        s = int(stage_arr[i])
-        stage_start = int(np.argmax(stage_arr == s))
-        phase_arr.append("warmup" if s in (2, 3, 4) and (i - stage_start) < 30
-                         else "main")
+    for st, a, b in blocks:
+        cfg, sc = STAGES[st], STAGES[st].staircase
+        stage_arr[a:b] = st
+        mu_r[a:b] = cfg.rwd_density
+        floor_arr[a:b] = sc.start
+        n_warm = min(30, (b - a) // 3) if cfg.has_warmup else 0
+        phase_arr[a:a + n_warm] = "warmup"
+        for var, col in STAIR_COL.items():
+            if sc.variable == var:
+                cols[col][a:b] = np.linspace(sc.start, sc.target, b - a)
+                held[col] = sc.target
+            else:
+                cols[col][a:b] = held[col]
+        if sc.variable != "none":
+            m = np.zeros(n, dtype=bool)
+            m[a + n_warm:b] = True
+            t = np.arange(1, m.sum() + 1)
+            step_boost_arr[m] = np.where(t <= _nb,
+                                         _M * np.exp(-t / _tau) + 1.0, 1.0)
+            base = sc.grad_tol()  # one up-step of this variable
+            step_delta_arr[m] = np.abs(rng.normal(base, base * 0.3, m.sum()))
 
-    mu_nr = np.where(stage_arr == 2, np.linspace(0.0, 1.6, n),
-                     np.where(stage_arr == 3, 1.6,
-                     np.where(stage_arr == 4, np.linspace(1.6, 2.3, n),
-                              np.where(stage_arr == 5, 2.3, 0.0))))
-    mu_r = np.where(stage_arr >= 1, 7.7, 0.0)
-    led_ms = np.where(stage_arr == 3,
-                      np.linspace(5000, 800, n).astype(int),
-                      np.where(stage_arr >= 4, 200, 5000))
-    checkpoint_arr = np.where(stage_arr >= 2, stage_arr - 1, 0)
-    floor_arr = np.where(stage_arr == 2, 0.5,
-                         np.where(stage_arr == 3, 5000.0,
-                                  np.where(stage_arr == 4, 2.0, 0.0)))
+    checkpoint_arr = np.clip(stage_arr - 1, 0, None)
     rescue_arr = np.zeros(n, dtype=int)
-    rescue_arr[270:280] = 1
-    rescue_arr[288:298] = 1
-    session_arr = np.searchsorted([60, 120, 180, 240], np.arange(n)) + 1
+    rescue_arr[n - 80:n - 70] = 1
+    rescue_arr[n - 60:n - 50] = 1
+    session_arr = np.searchsorted(edges[1:-1], np.arange(n)) + 1
 
     # Trial timestamps: 2-8 s apart, with a couple of longer pauses, so the
     # time-spaced x-axis differs visibly from the trial index.
     gaps = rng.uniform(2.0, 8.0, n)
-    gaps[100] += 120.0
-    gaps[220] += 240.0
+    gaps[n // 3] += 120.0
+    gaps[2 * n // 3] += 240.0
     trial_start = 1.7e9 + np.cumsum(gaps)
 
-    correct_arr = rng.integers(0, 2, n)
-    step_delta_arr = np.zeros(n)
-    step_boost_arr = np.ones(n)
-    _M, _tau, _nb = 4.0, 10.0, 30
-    _base_by_stage = {1: 15.0, 2: 0.005, 3: 30.0, 4: 0.005}
-    for _s in [1, 2, 3, 4]:
-        _mask = (stage_arr == _s) & (np.array(phase_arr) == "main")
-        if _mask.any():
-            _t = np.arange(1, _mask.sum() + 1)
-            step_boost_arr[_mask] = np.where(
-                _t <= _nb, _M * np.exp(-_t / _tau) + 1.0, 1.0)
-            _base = _base_by_stage[_s]
-            step_delta_arr[_mask] = np.abs(
-                rng.normal(_base, _base * 0.3, _mask.sum()))
-
-    light_intensity = np.where(stage_arr < 1, 255,
-                               np.where(stage_arr == 1,
-                                        np.linspace(255, 30, n).astype(int), 0)
-                               )
     emp_r = np.clip(0.5 + rng.normal(0, 0.07, n), 0.05, 0.95)
-
     dates = pd.to_datetime("2026-01-01") + pd.to_timedelta(session_arr - 1,
                                                            unit="D")
     return pd.DataFrame({"trial":            np.arange(n),
@@ -942,11 +960,13 @@ def demo_df(n: int = 300, seed: int = 42) -> pd.DataFrame:
                          "TRIAL_START":      trial_start,
                          "stage":            stage_arr,
                          "phase":            phase_arr,
-                         "trial_correct":    correct_arr,
+                         "trial_correct":    rng.integers(0, 2, n),
                          "mu_r":             mu_r,
-                         "mu_nr":            mu_nr,
-                         "led_ms":           led_ms,
-                         "light_intensity":  light_intensity,
+                         "mu_nr":            cols["mu_nr"],
+                         "led_ms":           cols["led_ms"].astype(int),
+                         "light_intensity":  cols["light_intensity"],
+                         "led_end_dead_zone_cm":
+                             cols["led_end_dead_zone_cm"],
                          "empR":             emp_r,
                          "streak":           rng.integers(-5, 6, n),
                          "step_delta":       step_delta_arr,
