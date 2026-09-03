@@ -202,3 +202,73 @@ PHASE_BGR: dict[str, tuple[int, int, int]] = {
 REQUIRED_COLS: frozenset[str] = frozenset({"trial", "trial_correct",
                                            "stage", "phase", "mu_nr",
                                            "led_ms", "streak"})
+
+
+# Dump this config to be read by analysis repo
+STAGES_SCHEMA = 1
+STAGES_FILENAME = "task_stages.json"
+
+
+def stages_as_dict(settings=None) -> dict:
+    """Get stages as plain JSON-ready data."""
+    stages = {}
+    for sid, cfg in sorted(STAGES.items()):
+        sc = cfg.staircase
+        stages[str(sid)] = {
+            "name": cfg.name,
+            "color": cfg.color,
+            "advance_threshold": cfg.advance_threshold,
+            "rescue_threshold": cfg.rescue_threshold,
+            "staircase_vars": [s.variable for s in cfg.staircases],
+            "staircase_start": sc.start,
+            "staircase_target": sc.target,
+            "timed_leds": cfg.timed_leds,
+            "has_warmup": cfg.has_warmup,
+            "warmup_min_trials": cfg.warmup_min_trials,
+            "warmup_acc_threshold": cfg.warmup_acc_threshold,
+            "warmup_bias_threshold": cfg.warmup_bias_threshold,
+            "grad_tol": sc.grad_tol(settings) if cfg.staircases else 0.0,
+        }
+    return {"schema": STAGES_SCHEMA,
+            "task_commit": _git_commit(),
+            "dumped_at": _utc_now(),
+            "checkpoint_colors": list(CHECKPOINT_COLORS),
+            "stages": stages}
+
+
+def dump_stages(path=None, settings=None):
+    """Write `stages_as_dict` to JSON. Returns the path written.
+
+    Run after any change to STAGES:  python -m task_stages --dump [path]
+    """
+    import json
+    from pathlib import Path
+
+    if path is None:
+        path = (Path(__file__).resolve().parents[1] / "data" / STAGES_FILENAME)
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(stages_as_dict(settings), indent=1))
+    return path
+
+
+def _git_commit():
+    """Get current commit ID."""
+    import subprocess
+    from pathlib import Path
+    try:
+        return subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent),
+             "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, check=True).stdout.strip()
+    except (subprocess.CalledProcessError, OSError):
+        return None
+
+
+def _utc_now():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+if __name__ == "__main__":
+    print("wrote", dump_stages())
