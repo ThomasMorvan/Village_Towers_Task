@@ -232,6 +232,9 @@ class DrawFurthestX(CameraDrawBase):
             except Exception:
                 traceback.print_exc()
 
+        if cam.view_detection:
+            self._draw_detected_contour(cam)
+
         anm = cam.items_to_draw.get("auto_instance")
 
         hud = cam.items_to_draw.get("hud")
@@ -240,6 +243,13 @@ class DrawFurthestX(CameraDrawBase):
 
         if anm is not None and hasattr(anm, "acc"):
             self._draw_accumulator(cam.frame, anm)
+
+    def _draw_detected_contour(self, cam: Camera) -> None:
+        """Draw blob contour."""
+        contour = getattr(cam, "detected_contour", None)
+        if contour is None:
+            return
+        cv2.drawContours(cam.frame, [contour], -1, (0, 255, 0), 1)
 
     def _draw_shadow_comparison(self, cam: Camera) -> None:  # FIXME delete
         """Overlays old/new detection comparison for the corridor camera."""
