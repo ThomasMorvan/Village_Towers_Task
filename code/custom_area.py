@@ -6,7 +6,7 @@ class TowerCustomArea(CustomAreaBase):
 
     name = "T_AREA"
     active = True
-    threshold = 65
+    threshold = 80
 
     polygons = [[[60, 225], [585, 225], [585, 265], [60, 265]],  # body bar
                 [[585, 215], [625, 215], [625, 285], [585, 285]],  # stem tip

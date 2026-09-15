@@ -99,6 +99,13 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.s0_valid_sessions = 0
         self.settings.s0_required_sessions = 2
 
+        # --- V2 (TowersTaskV2, speed-gated) -------------------------
+        self.settings.staircase_delta_up_speed = 0.5     # cm/s, on correct
+        self.settings.staircase_delta_max_speed = 5.0    # cm/s, cap
+        self.settings.v2_stage = 0          # separate from V1's `stage`
+        self.settings.last_max_speed = 60.0  # cm/s, resumes the staircase
+        self.settings.v2_enabled = False    # opt in per subject
+
         # Last-known staircase state.
         self.settings.last_mu_nr = 0.0
         self.settings.last_led_ms = 5000
@@ -199,8 +206,52 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.light_intensity_high = 255  # bright cue (port 2, S1 max)
         self.settings.light_intensity_low = 50
 
+    def _update_v2_settings(self) -> bool:
+        """Between-session persistence for TowersTaskV2.
+
+        Kept entirely separate from the V1 logic below: it reads only
+        TowersTaskV2 rows and writes only `v2_stage` / `last_max_speed`,
+        never `stage`.
+
+        Returns True if the subject is on V2, so the caller can skip V1
+        advancement for it.
+        """
+        if not getattr(self.settings, "v2_enabled", False):
+            return False
+
+        self.settings.next_task = "TowersTaskV2"
+        df_v2 = self.df[(self.df["task"] == "TowersTaskV2")
+                        & (self.df["subject"] == self.subject)]
+        df_v2 = df_v2.dropna(subset=["v2_stage"]) if "v2_stage" in df_v2 \
+            else df_v2
+        if df_v2.empty:
+            # First V2 session for this subject. Flush the rolling window
+            self.settings.last_perf_window = []
+            return True
+
+        if "v2_stage" not in df_v2:
+            return True
+        last = df_v2[df_v2["session"] == df_v2["session"].max()]
+        row = last.iloc[-1]
+        self.settings.v2_stage = int(row["v2_stage"])
+        if "max_speed_cm_s" in row and row["max_speed_cm_s"] == \
+                row["max_speed_cm_s"]:
+            self.settings.last_max_speed = float(row["max_speed_cm_s"])
+
+        # Carry V2 acc window, filtered to main trials.
+        win = int(getattr(self.settings, "acc_window", 40))
+        main = df_v2[df_v2["phase"] == "main"] if "phase" in df_v2 else df_v2
+        stage_main = main[main["v2_stage"] == self.settings.v2_stage]
+        if "trial_correct" in stage_main:
+            recent = stage_main["trial_correct"].dropna().tail(win)
+            self.settings.last_perf_window = [int(bool(c)) for c in recent]
+        return True
+
     def update_training_settings(self) -> None:
         """Run between sessions to advance stage / step."""
+        if self._update_v2_settings():
+            return  # subject is on V2; V1 stage logic must not run
+
         df_task = self.df[(self.df["task"] == "TowersTask")
                           & (self.df["subject"] == self.subject)]  # per mouse!
 

@@ -16,6 +16,7 @@ class Difficulty:
     led_ms: int = 5000  # LED on-duration (ms)
     light_intensity: int = 255  # S1 visual cue PWM (ports 1/3), fades 255->0
     end_dead_zone_cm: float = 0.0  # ramps 0->target in S2, fixed after
+    max_speed_cm_s: float = 999.0
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,9 @@ class Staircase:
         elif self.variable == "dead_zone_cm":
             delta_up = settings.staircase_delta_up_deadzone
             delta_max = settings.staircase_delta_max_deadzone
+        elif self.variable == "max_speed":
+            delta_up = getattr(settings, "staircase_delta_up_speed", 0.5)
+            delta_max = getattr(settings, "staircase_delta_max_speed", 5.0)
         else:
             delta_up = settings.staircase_delta_up
             delta_max = settings.staircase_delta_max
@@ -85,6 +89,7 @@ class Staircase:
             "tower_duration":  ("staircase_delta_up_ms", 10.0),
             "light_intensity": ("staircase_delta_up_intensity", 5.0),
             "dead_zone_cm":    ("staircase_delta_up_deadzone", 0.5),
+            "max_speed":       ("staircase_delta_up_speed", 0.5),
         }.get(self.variable, ("staircase_delta_up", 0.0025))
         step = float(getattr(settings, name, default))
         if size is None:

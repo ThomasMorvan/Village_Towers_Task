@@ -151,6 +151,10 @@ class TowersTask(TowersTaskBase):
             "carryover_n":      self._odc._carryover_n,
         }
 
+    @property
+    def stage_cfg(self):
+        return STAGES[self._odc.stage]
+
     def _apply_stage(self, stage: int) -> None:
         """update LedPicker + trial flags for the given stage.
         Difficulty is already set in _odc before this is called.
@@ -200,7 +204,7 @@ class TowersTask(TowersTaskBase):
         # Always keep led_picker in sync after staircase update
         if not any([event.warmup_passed, event.stage_advanced_to,
                     event.rescue_triggered, event.rescue_ended]):
-            cfg = STAGES[self._odc.stage]
+            cfg = self.stage_cfg
             if cfg.staircase.variable != "none" and self._odc.phase == "main":
                 self.led_picker.update_mu(self._odc.difficulty.mu_r,
                                           self._odc.difficulty.mu_nr)
@@ -208,12 +212,12 @@ class TowersTask(TowersTaskBase):
                     self._odc.difficulty.end_dead_zone_cm)
 
     def set_ui_settings(self):
-        settings.set("AREA1_BOX", [55, 225, 585, 265, 65])
+        settings.set("AREA1_BOX", [55, 225, 585, 265, 80])
         settings.set("USAGE1_BOX", "ALLOWED")
         # Stage 0 proximity reward: area2 = left port, area3 = right port.
-        settings.set("AREA2_BOX", [15, 370, 50, 430, 65])
-        settings.set("AREA3_BOX", [25, 60, 60, 130, 65])
-        settings.set("AREA4_BOX", [585, 215, 625, 285, 65])
+        settings.set("AREA2_BOX", [15, 370, 50, 430, 80])
+        settings.set("AREA3_BOX", [25, 60, 60, 130, 80])
+        settings.set("AREA4_BOX", [585, 215, 625, 285, 80])
         settings.set("USAGE2_BOX", "TRIGGER")
         settings.set("USAGE3_BOX", "TRIGGER")
         settings.set("USAGE4_BOX", "TRIGGER")
@@ -345,7 +349,7 @@ class TowersTask(TowersTaskBase):
         """Whether LEDs are timed this trial. Timed stages still run warmup
         and rescue ("easy block") trials untimed (always-on), matching the
         paper's T4/T7-type easy trials."""
-        return (STAGES[self._odc.stage].timed_leds
+        return (self.stage_cfg.timed_leds
                 and self._odc.phase != "warmup"
                 and not self._odc.rescue_active)
 
@@ -444,7 +448,7 @@ class TowersTask(TowersTaskBase):
             self.middle_poke_action = "END TRIAL"
 
         self.cues = []
-        if STAGES[self._odc.stage].both_sides_rewarded:
+        if self.stage_cfg.both_sides_rewarded:
             # Stage 0: motor routine, both ports rewarded
             self.current_trial_rwd_side = TrialSide.BOTH
             left_outputs = [Output.Valve1]
@@ -480,7 +484,7 @@ class TowersTask(TowersTaskBase):
                     f"Invalid trial side: {self.current_trial_rwd_side}")
 
         side = self.current_trial_rwd_side
-        pol = STAGES[self._odc.stage].policy
+        pol = self.stage_cfg.policy
         main_phase = (self._odc.phase == "main"
                       and not self._odc.rescue_active)
         self._reward_mult = self._reward_policy.reward_mult_for_trial(
