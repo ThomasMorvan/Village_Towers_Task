@@ -21,6 +21,7 @@ class TowersTaskV2(TowersTask):
         self._to_cm = None
         self._suppress_cues = False
         self._led_suppressed_log: list = []
+        self.suppressed_leds_idx: set = set()
         self._base_adv: list = []
         self._reset_speed_stats()
 
@@ -111,8 +112,20 @@ class TowersTaskV2(TowersTask):
         if self._suppress_cues and n in (self.SOFTCODE_SINGLE_LED_ON,
                                          self.SOFTCODE_ALL_LEDS_ON):
             self._n_suppressed += 1
+            led = self.current_led
+            self.suppressed_leds_idx.update(
+                led if isinstance(led, (list, tuple, set)) else [led])
             return None
         return super().execute_function(n)
+
+    def _publish_led_pos(self):
+        """Same as TowersTask, but separate a suppressed cue from a lit cue."""
+        super()._publish_led_pos()
+        lit = self.used_leds_idx - self.suppressed_leds_idx
+        self.cam_box.items_to_draw["led_pos_used"] = (
+            [self.led_positions[i] for i in lit])
+        self.cam_box.items_to_draw["led_pos_suppressed"] = (
+            [self.led_positions[i] for i in self.suppressed_leds_idx])
 
     def _update_hud(self) -> None:
         stage = self._odc.stage
@@ -192,5 +205,7 @@ class TowersTaskV2(TowersTask):
                  f"fast={self._n_fast / n:.2f} "
                  f"peak={self._max_speed:.1f}cm/s")
         self._led_suppressed_log = []
+        self.suppressed_leds_idx = set()
+        self.cam_box.items_to_draw["led_pos_suppressed"] = []
         self._reset_speed_stats()
         self._apply_speed_threshold()

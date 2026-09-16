@@ -322,6 +322,15 @@ class DrawFurthestX(CameraDrawBase):
             for pos in led_pos_used:
                 painter.drawEllipse(QPoint(sx(pos.x_hat), sy(pos.y_hat)), r, r)
 
+        # Cross for the leds that were not fired because animal was too fast
+        led_pos_suppressed = cam.items_to_draw.get("led_pos_suppressed", -1)
+        if isinstance(led_pos_suppressed, list) and led_pos_suppressed:
+            painter.setPen(QPen(QColor(255, 0, 0), 2))
+            for pos in led_pos_suppressed:
+                cx, cy = sx(pos.x_hat), sy(pos.y_hat)
+                painter.drawLine(cx - r, cy - r, cx + r, cy + r)
+                painter.drawLine(cx - r, cy + r, cx + r, cy - r)
+
         verify = cam.items_to_draw.get("verify_nearest")
         if verify:
             cx, cy = verify["centroid"]
