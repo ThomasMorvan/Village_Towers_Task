@@ -120,7 +120,21 @@ class TowersTaskV2(TowersTask):
         acc = self._odc.rolling_acc
         acc_txt = f"{acc * 100:.0f}" if acc is not None else "?"
         sc = cfg.staircase
-        if sc.variable == "max_speed":
+        if self._odc.phase == "warmup" and self._odc._warmup is not None:
+            w = self._odc._warmup
+            adv = [
+                ("W-trials:", f" {self._odc.warmup_n}/{w.min_trials}",
+                 self._odc.warmup_n >= w.min_trials),
+                ("W-acc:",
+                 f" {self._odc.warmup_acc * 100:.0f}/"
+                 f"{w.acc_threshold * 100:.0f}%",
+                 self._odc.warmup_acc >= w.acc_threshold),
+                ("W-bias:",
+                 f" {self._odc.warmup_bias * 100:.0f}/"
+                 f"{w.bias_threshold * 100:.0f}%",
+                 self._odc.warmup_bias <= w.bias_threshold),
+            ]
+        elif sc.variable == "max_speed":
             adv = [("Acc:", f" {acc_txt}/{cfg.advance_threshold * 100:.0f}%",
                     acc is not None and acc >= cfg.advance_threshold),
                    ("MaxSpd:", f" {self._odc.max_speed:.1f}/{sc.target:.0f}",
