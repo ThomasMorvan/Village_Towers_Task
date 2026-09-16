@@ -124,7 +124,7 @@ class OnlineDifficultyControllerV2:
 
         if self.phase == "warmup" and self._warmup is not None:
             self._warmup.record(side, correct)
-            if self._warmup.passed:
+            if self._warmup.passed():
                 self.phase = "main"
                 if self._boost:
                     self._boost.reset()
