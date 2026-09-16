@@ -379,14 +379,24 @@ class DrawFurthestX(CameraDrawBase):
             self._draw_trace(painter, list(anm.trace), maxlen, 80, sx, sy)
         else:
             animal_trace = list(cam.items_to_draw.get("animal_trace", []))
-            self._draw_trace(painter, animal_trace, maxlen, 0, sx, sy)
+            fast = cam.items_to_draw.get("animal_trace_fast")
+            fast = list(fast) if fast is not None else None
+            self._draw_trace(painter, animal_trace, maxlen, 0, sx, sy, fast)
 
     @staticmethod
-    def _draw_trace(painter, trace, maxlen, red_boost, sx, sy) -> None:
+    def _draw_trace(painter, trace, maxlen, red_boost, sx, sy,
+                    fast=None) -> None:
+        """Fading trail. With `fast` (one bool per point, same length as
+        `trace`) each segment is red when animal is FAST, green when SLOW."""
         n = len(trace)
+        use_fast = fast is not None and len(fast) == n
         for i in range(1, n):
             age = n - 1 - i
             alpha = max(0, int(255 * (maxlen - age) / maxlen))
-            painter.setPen(QPen(QColor(0, 200, 80 + red_boost, alpha), 2))
+            if use_fast and fast[i]:
+                color = QColor(230, 40, 40, alpha)
+            else:
+                color = QColor(0, 200, 80 + red_boost, alpha)
+            painter.setPen(QPen(color, 2))
             painter.drawLine(sx(trace[i - 1][0]), sy(trace[i - 1][1]),
                              sx(trace[i][0]), sy(trace[i][1]))
