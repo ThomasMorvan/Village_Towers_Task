@@ -3,7 +3,7 @@
 from collections import deque
 
 from online_difficulty_controller import AdaptationEvent, OnsetBoost, Warmup
-from task_stages import Difficulty
+from task_stages import STAGES as STAGES_V1, Difficulty
 from task_stages_v2 import MAX_STAGE_V2, MIN_STAGE_V2, STAGES_V2
 
 
@@ -82,8 +82,7 @@ class OnlineDifficultyControllerV2:
             mu_r=cfg.rwd_density,
             mu_nr=cfg.no_rwd_density,
             led_ms=int(getattr(settings, "min_tower_duration", 100)),
-            end_dead_zone_cm=float(getattr(settings, "last_dead_zone_cm",
-                                           0.0)))
+            end_dead_zone_cm=float(STAGES_V1[2].staircase.target))
 
         if sc.variable == "max_speed":
             last = float(getattr(settings, "last_max_speed", sc.start))

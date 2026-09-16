@@ -342,7 +342,7 @@ class TowersTask(TowersTaskBase):
 
         if self._leds_timed():
             self._softcode_callback_proximity()
-        elif self._odc.stage > 0:
+        elif not self.stage_cfg.both_sides_rewarded:
             self._softcode_callback_always_on()
 
     def _leds_timed(self) -> bool:
