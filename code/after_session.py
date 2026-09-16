@@ -230,7 +230,7 @@ class SessionQC:
             issues.append(_str)
             is_ok = False
 
-        return is_ok, "\n".join(issues) if issues else None
+        return is_ok, "  |  ".join(issues) if issues else None
 
 
 class AfterSession(AfterSessionBase):
