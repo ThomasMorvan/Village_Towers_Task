@@ -1,6 +1,7 @@
 """TowersTask V2: cues are suppressed while the animal runs too fast."""
 
 import time
+from collections import deque
 
 from online_difficulty_controller_v2 import OnlineDifficultyControllerV2
 from online_speed_estimator import OnlineSpeedEstimator, px_to_cm_fit
@@ -22,6 +23,7 @@ class TowersTaskV2(TowersTask):
         self._suppress_cues = False
         self._led_suppressed_log: list = []
         self.suppressed_leds_idx: set = set()
+        self.animal_trace_fast = deque(maxlen=self.animal_trace.maxlen)
         self._base_adv: list = []
         self._reset_speed_stats()
 
@@ -93,6 +95,10 @@ class TowersTaskV2(TowersTask):
                 self._max_speed = max(self._max_speed, speed)
         n_before = len(self._led_on_log)
         super().softcode_callback()
+        if self.current_x is not None and self.current_y is not None:
+            self.animal_trace_fast.append(bool(self._suppress_cues))
+            self.cam_box.items_to_draw["animal_trace_fast"] = \
+                self.animal_trace_fast
         if self._suppress_cues and len(self._led_on_log) > n_before:
             self._led_suppressed_log.extend(self._led_on_log[n_before:])
             del self._led_on_log[n_before:]
@@ -207,5 +213,8 @@ class TowersTaskV2(TowersTask):
         self._led_suppressed_log = []
         self.suppressed_leds_idx = set()
         self.cam_box.items_to_draw["led_pos_suppressed"] = []
+        self.animal_trace_fast = deque(maxlen=self.animal_trace.maxlen)
+        self.cam_box.items_to_draw["animal_trace_fast"] = \
+            self.animal_trace_fast
         self._reset_speed_stats()
         self._apply_speed_threshold()
