@@ -69,6 +69,8 @@ class TowersTaskV2(TowersTask):
         self.speed_estimator.th_hi = hi
         self.speed_estimator.th_lo = hi - self.TH_LO_DIFF
         self.speed_estimator.reset()
+        # Trial starts when animals drinks, so SLOW initial state
+        self.speed_estimator.moving = False
 
     def softcode_callback(self):
         if self._to_cm is not None:
@@ -103,6 +105,9 @@ class TowersTaskV2(TowersTask):
         used/available sets) identical to V1. The trigger is consumed but the
         light does not come on.
         """
+        if n == 3 and not self.accept_frames.is_set():
+            self._draw_speed(tracking=False)
+
         if self._suppress_cues and n in (self.SOFTCODE_SINGLE_LED_ON,
                                          self.SOFTCODE_ALL_LEDS_ON):
             self._n_suppressed += 1
@@ -140,9 +145,13 @@ class TowersTaskV2(TowersTask):
         }
         self._base_adv = list(adv)
 
-    def _draw_speed(self) -> None:
+    def _draw_speed(self, tracking: bool = True) -> None:
         hud = self.cam_box.items_to_draw.get("hud")
         if hud is None:
+            return
+        if not tracking:
+            hud["adv_label"] = self._base_adv + [
+                ("Speed:", "  no tracking", True)]
             return
         speed = self.speed_estimator.speed
         value = "   --" if speed is None else f" {speed:5.1f}"
