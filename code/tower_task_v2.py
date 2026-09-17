@@ -13,12 +13,12 @@ from village.scripts.log import log
 class TowersTaskV2(TowersTask):
     """TowersTask with a speed-gated cue contingency."""
 
-    TH_LO_DIFF = 10.0
+    GATE_BAND = 5.0
 
     def __init__(self):
         super().__init__()
         self._odc = OnlineDifficultyControllerV2()
-        self.speed_estimator = OnlineSpeedEstimator()
+        self.speed_estimator = OnlineSpeedEstimator(window=5, ends=2, dwell=1)
         self._to_cm = None
         self._suppress_cues = False
         self._led_suppressed_log: list = []
@@ -68,9 +68,9 @@ class TowersTaskV2(TowersTask):
 
     def _apply_speed_threshold(self) -> None:
         """Push the staircase's current threshold into the estimator."""
-        hi = float(self._odc.max_speed)
-        self.speed_estimator.th_hi = hi
-        self.speed_estimator.th_lo = hi - self.TH_LO_DIFF
+        thr = float(self._odc.max_speed)
+        self.speed_estimator.th_hi = thr + self.GATE_BAND / 2
+        self.speed_estimator.th_lo = thr - self.GATE_BAND / 2
         self.speed_estimator.reset()
         # Trial starts when animals drinks, so SLOW initial state
         self.speed_estimator.moving = False
