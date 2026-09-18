@@ -101,7 +101,7 @@ class OnlineDifficultyControllerV2:
             M=float(getattr(settings, "staircase_M", 4.0)),
             tau=float(getattr(settings, "staircase_tau", 10.0)),
             n_trials=int(getattr(settings, "onset_boost_trials", 30)),
-            enabled=True)
+            enabled=False)
         self._reset_warmup(settings)
 
     def _reset_warmup(self, settings) -> None:

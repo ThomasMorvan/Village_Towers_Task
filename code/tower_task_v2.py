@@ -218,3 +218,4 @@ class TowersTaskV2(TowersTask):
             self.animal_trace_fast
         self._reset_speed_stats()
         self._apply_speed_threshold()
+        self.settings.last_max_speed = float(self._odc.max_speed)
