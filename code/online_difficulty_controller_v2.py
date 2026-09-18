@@ -2,13 +2,14 @@
 
 from collections import deque
 
-from online_difficulty_controller import AdaptationEvent, OnsetBoost, Warmup
+from online_difficulty_controller import AdaptationEvent, Warmup
 from task_stages import STAGES as STAGES_V1, Difficulty
-from task_stages_v2 import MAX_STAGE_V2, MIN_STAGE_V2, STAGES_V2
+from task_stages_v2 import (MAX_STAGE_V2, MIN_STAGE_V2, SLOW_FRAC,
+                            STAGE_GATE, STAGES_V2)
 
 
 class OnlineDifficultyControllerV2:
-    """Within-session difficulty controller for TowersTaskV2."""
+    """Within-session controller for TowersTaskV2_1."""
 
     STAGE_SETTING = "v2_stage"
 
@@ -22,10 +23,10 @@ class OnlineDifficultyControllerV2:
         self.last_boost: float = 1.0
         self._streak: int = 0
         self._perf_window: deque = deque()
+        self._slow_window: deque = deque()
         self._carryover_n: int = 0
-        self._n_at_target: int = 0
+        self.run_was_slow: bool | None = None
         self._warmup: Warmup | None = None
-        self._boost: OnsetBoost | None = None
 
     @property
     def config(self):
@@ -62,46 +63,35 @@ class OnlineDifficultyControllerV2:
         return sum(self._perf_window) / len(self._perf_window)
 
     @property
+    def slow_frac(self) -> float | None:
+        if not self._slow_window:
+            return None
+        return sum(self._slow_window) / len(self._slow_window)
+
+    @property
     def max_speed(self) -> float:
         return self.difficulty.max_speed_cm_s
 
     @property
     def gate_active(self) -> bool:
-        """Whether the speed contingency applies to this trial."""
         return self.phase == "main"
 
     def start(self, settings) -> None:
-        """Restore stage and threshold, then open a warmup if the stage has
-        one. Reads `v2_stage` / `last_max_speed`, never V1's `stage`."""
         self.stage = min(max(int(getattr(settings, self.STAGE_SETTING, 0)),
                              MIN_STAGE_V2), MAX_STAGE_V2)
         cfg = self.config
-        sc = cfg.staircase
-
         self.difficulty = Difficulty(
-            mu_r=cfg.rwd_density,
-            mu_nr=cfg.no_rwd_density,
+            mu_r=cfg.rwd_density, mu_nr=cfg.no_rwd_density,
             led_ms=int(getattr(settings, "min_tower_duration", 100)),
-            end_dead_zone_cm=float(STAGES_V1[2].staircase.target))
-
-        if sc.variable == "max_speed":
-            last = float(getattr(settings, "last_max_speed", sc.start))
-            self.difficulty.max_speed_cm_s = min(max(last, sc.target),
-                                                 sc.start)
-        else:
-            self.difficulty.max_speed_cm_s = STAGES_V2[0].staircase.target
-
+            end_dead_zone_cm=float(STAGES_V1[2].staircase.target),
+            max_speed_cm_s=STAGE_GATE[self.stage])
+        win = int(getattr(settings, "acc_window", 40))
         self._perf_window = deque(
-            list(getattr(settings, "last_perf_window", []) or []),
-            maxlen=int(getattr(settings, "acc_window", 40)))
+            list(getattr(settings, "last_perf_window", []) or []), maxlen=win)
+        self._slow_window = deque(
+            list(getattr(settings, "last_slow_window", []) or []), maxlen=win)
         self._carryover_n = len(self._perf_window)
-        self._n_at_target = 0
         self._streak = 0
-        self._boost = OnsetBoost(
-            M=float(getattr(settings, "staircase_M", 4.0)),
-            tau=float(getattr(settings, "staircase_tau", 10.0)),
-            n_trials=int(getattr(settings, "onset_boost_trials", 30)),
-            enabled=False)
         self._reset_warmup(settings)
 
     def _reset_warmup(self, settings) -> None:
@@ -119,62 +109,35 @@ class OnlineDifficultyControllerV2:
 
     def after_trial(self, correct: bool, side, settings,
                     bias: float = 0.0) -> AdaptationEvent:
-        cfg = self.config
-
         if self.phase == "warmup" and self._warmup is not None:
             self._warmup.record(side, correct)
             if self._warmup.passed():
                 self.phase = "main"
-                if self._boost:
-                    self._boost.reset()
                 return AdaptationEvent(warmup_passed=True)
             return AdaptationEvent()
 
         self._perf_window.append(int(correct))
-
-        sc = cfg.staircase
-        if sc.variable == "max_speed":
-            boost = self._boost.next() if self._boost else 1.0
-            delta, self._streak, self.last_boost = sc.compute_step(
-                correct, self._streak, boost, settings)
-            self.last_delta = delta
-            if correct:
-                self.difficulty.max_speed_cm_s = max(
-                    self.difficulty.max_speed_cm_s - delta, sc.target)
-            else:
-                self.difficulty.max_speed_cm_s = min(
-                    self.difficulty.max_speed_cm_s + delta, sc.start)
-
+        if self.run_was_slow is not None:
+            self._slow_window.append(int(self.run_was_slow))
+        self._streak = (max(1, self._streak + 1) if correct
+                        else min(-1, self._streak - 1))
         return self._check_graduation(settings)
 
     def _check_graduation(self, settings) -> AdaptationEvent:
-        """Generic rule: staircase target reached (within tolerance) while
-        rolling accuracy holds."""
         cfg = self.config
         if self.stage >= MAX_STAGE_V2:
             return AdaptationEvent()
-        acc = self.rolling_acc
-        if acc is None or len(self._perf_window) < self._perf_window.maxlen:
+        acc, slow = self.rolling_acc, self.slow_frac
+        if (acc is None or slow is None
+                or len(self._slow_window) < self._slow_window.maxlen):
             return AdaptationEvent()
-        sc = cfg.staircase
-        if sc.variable != "max_speed":
-            return AdaptationEvent()
-        tol = sc.grad_tol(settings)
-
-        if self.difficulty.max_speed_cm_s <= sc.target + sc.grad_tol(
-                settings, size=2.0):
-            self._n_at_target += 1
-        else:
-            self._n_at_target = 0
-        if (acc >= cfg.advance_threshold
-                and self._n_at_target >= self._perf_window.maxlen
-                and self.difficulty.max_speed_cm_s <= sc.target + tol):
+        if slow >= SLOW_FRAC and acc >= cfg.advance_threshold:
             self.stage += 1
             self.checkpoint += 1
             self._streak = 0
-            self._n_at_target = 0
             self._perf_window.clear()
+            self._slow_window.clear()
+            self.difficulty.max_speed_cm_s = STAGE_GATE[self.stage]
             self._reset_warmup(settings)
-            self.difficulty.max_speed_cm_s = STAGES_V2[0].staircase.target
             return AdaptationEvent(stage_advanced_to=self.stage)
         return AdaptationEvent()

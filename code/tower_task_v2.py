@@ -5,12 +5,12 @@ from collections import deque
 
 from online_difficulty_controller_v2 import OnlineDifficultyControllerV2
 from online_speed_estimator import OnlineSpeedEstimator, px_to_cm_fit
-from task_stages_v2 import STAGES_V2
+from task_stages_v2 import MAX_STAGE_V2, SLOW_FRAC, STAGES_V2
 from tower_task import TowersTask
 from village.scripts.log import log
 
 
-class TowersTaskV2(TowersTask):
+class TowersTaskV2_1(TowersTask):
     """TowersTask with a speed-gated cue contingency."""
 
     GATE_BAND = 5.0
@@ -64,10 +64,9 @@ class TowersTaskV2(TowersTask):
         self.led_picker.update_dead_zone(diff.end_dead_zone_cm)
 
         self.settings.v2_stage = stage
-        self.settings.last_max_speed = float(diff.max_speed_cm_s)
 
     def _apply_speed_threshold(self) -> None:
-        """Push the staircase's current threshold into the estimator."""
+        """Push this stage current threshold into the estimator."""
         thr = float(self._odc.max_speed)
         self.speed_estimator.th_hi = thr + self.GATE_BAND / 2
         self.speed_estimator.th_lo = thr - self.GATE_BAND / 2
@@ -138,7 +137,6 @@ class TowersTaskV2(TowersTask):
         cfg = STAGES_V2[stage]
         acc = self._odc.rolling_acc
         acc_txt = f"{acc * 100:.0f}" if acc is not None else "?"
-        sc = cfg.staircase
         if self._odc.phase == "warmup" and self._odc._warmup is not None:
             w = self._odc._warmup
             adv = [
@@ -153,14 +151,16 @@ class TowersTaskV2(TowersTask):
                  f"{w.bias_threshold * 100:.0f}%",
                  self._odc.warmup_bias <= w.bias_threshold),
             ]
-        elif sc.variable == "max_speed":
+        elif stage < MAX_STAGE_V2:
+            slow = self._odc.slow_frac
+            slow_txt = f"{slow * 100:.0f}" if slow is not None else "?"
             adv = [("Acc:", f" {acc_txt}/{cfg.advance_threshold * 100:.0f}%",
                     acc is not None and acc >= cfg.advance_threshold),
-                   ("MaxSpd:", f" {self._odc.max_speed:.1f}/{sc.target:.0f}",
-                    self._odc.max_speed <= sc.target + sc.grad_tol(
-                        self.settings))]
+                   ("Slow:", f" {slow_txt}/{SLOW_FRAC * 100:.0f}%",
+                    slow is not None and slow >= SLOW_FRAC),
+                   ("Gate:", f" {self._odc.max_speed:.0f} cm/s", True)]
         else:
-            adv = [("", "  V2 final", True)]
+            adv = [("Gate:", f" {self._odc.max_speed:.0f} final", True)]
 
         self.cam_box.items_to_draw["hud"] = {
             "phase": self._odc.phase,
@@ -194,9 +194,13 @@ class TowersTaskV2(TowersTask):
     def after_trial(self):
         n_shown = sum(len(e[1]) for e in self._led_on_log)
         n_hidden = sum(len(e[1]) for e in self._led_suppressed_log)
+        self._odc.run_was_slow = (
+            self._max_speed < self._odc.max_speed if self._n_frames else None)
         super().after_trial()
         n = max(self._n_frames, 1)
         self.register_value("v2_stage", self._odc.stage)
+        self.register_value("run_was_slow", self._odc.run_was_slow)
+        self.register_value("slow_frac", self._odc.slow_frac)
         self.register_value("max_speed_cm_s",
                             round(self._odc.max_speed, 2))
         self.register_value("cues_suppressed", self._n_suppressed)
@@ -218,4 +222,3 @@ class TowersTaskV2(TowersTask):
             self.animal_trace_fast
         self._reset_speed_stats()
         self._apply_speed_threshold()
-        self.settings.last_max_speed = float(self._odc.max_speed)

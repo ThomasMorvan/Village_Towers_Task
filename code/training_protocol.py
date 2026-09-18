@@ -99,11 +99,11 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.s0_valid_sessions = 0
         self.settings.s0_required_sessions = 2
 
-        # --- V2 (TowersTaskV2, speed-gated) -------------------------
+        # --- V2 (TowersTaskV2_1, speed-gated) -------------------------
         self.settings.staircase_delta_up_speed = 0.5     # cm/s, on correct
         self.settings.staircase_delta_max_speed = 5.0    # cm/s, cap
         self.settings.v2_stage = 0          # separate from V1's `stage`
-        self.settings.last_max_speed = 60.0  # cm/s, resumes the staircase
+        self.settings.last_slow_window = []
         self.settings.v2_enabled = False    # opt in per subject
 
         # Last-known staircase state.
@@ -207,10 +207,10 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.light_intensity_low = 50
 
     def _update_v2_settings(self) -> bool:
-        """Between-session persistence for TowersTaskV2.
+        """Between-session persistence for TowersTaskV2_1.
 
         Kept entirely separate from the V1 logic below: it reads only
-        TowersTaskV2 rows and writes only `v2_stage` / `last_max_speed`,
+        TowersTaskV2_1 rows and writes only `v2_stage` / `last_max_speed`,
         never `stage`.
 
         Returns True if the subject is on V2, so the caller can skip V1
@@ -219,14 +219,15 @@ class TrainingProtocol(TrainingProtocolBase):
         if not getattr(self.settings, "v2_enabled", False):
             return False
 
-        self.settings.next_task = "TowersTaskV2"
-        df_v2 = self.df[(self.df["task"] == "TowersTaskV2")
+        self.settings.next_task = "TowersTaskV2_1"
+        df_v2 = self.df[(self.df["task"] == "TowersTaskV2_1")
                         & (self.df["subject"] == self.subject)]
         df_v2 = df_v2.dropna(subset=["v2_stage"]) if "v2_stage" in df_v2 \
             else df_v2
         if df_v2.empty:
             # First V2 session for this subject. Flush the rolling window
             self.settings.last_perf_window = []
+            self.settings.last_slow_window = []
             return True
 
         if "v2_stage" not in df_v2:
@@ -245,6 +246,9 @@ class TrainingProtocol(TrainingProtocolBase):
         if "trial_correct" in stage_main:
             recent = stage_main["trial_correct"].dropna().tail(win)
             self.settings.last_perf_window = [int(bool(c)) for c in recent]
+        if "run_was_slow" in stage_main:
+            recent = stage_main["run_was_slow"].dropna().tail(win)
+            self.settings.last_slow_window = [int(bool(c)) for c in recent]
         return True
 
     def update_training_settings(self) -> None:
