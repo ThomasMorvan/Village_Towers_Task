@@ -1,6 +1,8 @@
 """TowersTask V2: cues are suppressed while the animal runs too fast."""
 
 import time
+
+import numpy as np
 from collections import deque
 
 from online_difficulty_controller_v2 import OnlineDifficultyControllerV2
@@ -32,6 +34,7 @@ class TowersTaskV2_1(TowersTask):
         self._n_fast = 0
         self._n_suppressed = 0
         self._max_speed = 0.0
+        self._speeds: list = []
 
     def start(self):
         self.settings.proximity_trigger = False
@@ -92,6 +95,7 @@ class TowersTaskV2_1(TowersTask):
             speed = self.speed_estimator.speed
             if speed is not None:
                 self._max_speed = max(self._max_speed, speed)
+                self._speeds.append(speed)
         n_before = len(self._led_on_log)
         super().softcode_callback()
         if self.current_x is not None and self.current_y is not None:
@@ -194,12 +198,17 @@ class TowersTaskV2_1(TowersTask):
     def after_trial(self):
         n_shown = sum(len(e[1]) for e in self._led_on_log)
         n_hidden = sum(len(e[1]) for e in self._led_suppressed_log)
+        # p90 of the run's speed, the max of a noisy estimate is
+        # biased up (~3 cm/s at window 5), and one spike shouldn't decide.
         self._odc.run_was_slow = (
-            self._max_speed < self._odc.max_speed if self._n_frames else None)
+            float(np.percentile(self._speeds, 90)) < self._odc.max_speed
+            if len(self._speeds) >= 10 else None)
         super().after_trial()
         n = max(self._n_frames, 1)
         self.register_value("v2_stage", self._odc.stage)
         self.register_value("run_was_slow", self._odc.run_was_slow)
+        self.register_value("trial_p90_speed", round(float(np.percentile(
+            self._speeds, 90)), 1) if self._speeds else None)
         self.register_value("slow_frac", self._odc.slow_frac)
         self.register_value("max_speed_cm_s",
                             round(self._odc.max_speed, 2))
