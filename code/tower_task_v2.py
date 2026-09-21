@@ -16,6 +16,9 @@ class TowersTaskV2_1(TowersTask):
     """TowersTask with a speed-gated cue contingency."""
 
     GATE_BAND = 5.0
+    DIM_RANGE = 10.0  # cm/s below the gate over which cues dim
+    DIM_TOP = 10  # LED value at gate - DIM_RANGE and below
+    DIM_LOW = 0  # LED value at the gate (0 = off)
 
     def __init__(self):
         super().__init__()
@@ -35,6 +38,7 @@ class TowersTaskV2_1(TowersTask):
         self._n_suppressed = 0
         self._max_speed = 0.0
         self._speeds: list = []
+        self._cue_brightness: list = []
 
     def start(self):
         self.settings.proximity_trigger = False
@@ -50,6 +54,21 @@ class TowersTaskV2_1(TowersTask):
         log.info(f"[v2] stage={self._odc.stage} "
                  f"({STAGES_V2[self._odc.stage].name}) "
                  f"max_speed={self._odc.max_speed:.1f} cm/s")
+
+    @property
+    def COLOR_ON(self):
+        """Cue colour at the moment it fires, scaled by current speed.
+        direct_functions.function5 reads this per cue, so no other change
+        is needed for graded feedback. Warmup keeps full brightness."""
+        base = TowersTask.COLOR_ON
+        speed = self.speed_estimator.speed
+        if speed is None or not self._odc.gate_active:
+            return base
+        gate = float(self._odc.max_speed)
+        frac = min(max((gate - speed) / self.DIM_RANGE, 0.0), 1.0)
+        v = round(self.DIM_LOW + (self.DIM_TOP - self.DIM_LOW) * frac)
+        self._cue_brightness.append(v)
+        return type(base)(v, v, v)
 
     @property
     def stage_cfg(self):
@@ -198,15 +217,14 @@ class TowersTaskV2_1(TowersTask):
     def after_trial(self):
         n_shown = sum(len(e[1]) for e in self._led_on_log)
         n_hidden = sum(len(e[1]) for e in self._led_suppressed_log)
-        # p90 of the run's speed, the max of a noisy estimate is
-        # biased up (~3 cm/s at window 5), and one spike shouldn't decide.
-        self._odc.run_was_slow = (
-            float(np.percentile(self._speeds, 90)) < self._odc.max_speed
-            if len(self._speeds) >= 10 else None)
+        n_cues = n_shown + n_hidden
+        self._odc.run_was_slow = (n_shown / n_cues >= 0.9) if n_cues else None
         super().after_trial()
         n = max(self._n_frames, 1)
         self.register_value("v2_stage", self._odc.stage)
         self.register_value("run_was_slow", self._odc.run_was_slow)
+        self.register_value("cue_brightness", round(float(np.mean(
+            self._cue_brightness)), 1) if self._cue_brightness else None)
         self.register_value("trial_p90_speed", round(float(np.percentile(
             self._speeds, 90)), 1) if self._speeds else None)
         self.register_value("slow_frac", self._odc.slow_frac)
