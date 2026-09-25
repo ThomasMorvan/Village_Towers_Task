@@ -99,12 +99,15 @@ class TrainingProtocol(TrainingProtocolBase):
         self.settings.s0_valid_sessions = 0
         self.settings.s0_required_sessions = 2
 
-        # --- V2 (TowersTaskV2_1, speed-gated) -------------------------
-        self.settings.staircase_delta_up_speed = 0.5     # cm/s, on correct
-        self.settings.staircase_delta_max_speed = 5.0    # cm/s, cap
-        self.settings.v2_stage = 0          # separate from V1's `stage`
+        # --- V2 (TowersTaskV2_1, speed-gated)
+        self.settings.staircase_delta_up_speed = 0.5  # cm/s, on correct
+        self.settings.staircase_delta_max_speed = 5.0  # cm/s, cap
+        self.settings.v2_stage = 0  # separate from V1's `stage`
         self.settings.last_slow_window = []
-        self.settings.v2_enabled = False    # opt in per subject
+
+        # --- V3 (TowersTaskV3, fixed-N cue stimulus)
+        self.settings.n_cues = 10  # cues per trial, at fixed positions
+        self.settings.cue_p = 0.75  # P(cue on the rewarded side)
 
         # Last-known staircase state.
         self.settings.last_mu_nr = 0.0
@@ -213,13 +216,14 @@ class TrainingProtocol(TrainingProtocolBase):
         TowersTaskV2_1 rows and writes only `v2_stage` / `last_max_speed`,
         never `stage`.
 
+        Make a mouse do this task by setting next_task from the Subjects tab
+
         Returns True if the subject is on V2, so the caller can skip V1
         advancement for it.
         """
-        if not getattr(self.settings, "v2_enabled", False):
+        if self.settings.next_task != "TowersTaskV2_1":
             return False
 
-        self.settings.next_task = "TowersTaskV2_1"
         df_v2 = self.df[(self.df["task"] == "TowersTaskV2_1")
                         & (self.df["subject"] == self.subject)]
         df_v2 = df_v2.dropna(subset=["v2_stage"]) if "v2_stage" in df_v2 \
@@ -251,8 +255,31 @@ class TrainingProtocol(TrainingProtocolBase):
             self.settings.last_slow_window = [int(bool(c)) for c in recent]
         return True
 
+    def _update_v3_settings(self) -> bool:
+        """Between-session persistence for TowersTaskV3.
+        V3 has no stage ladder and no staircase, only carry the accuracy window
+        Make a mouse do this task by setting next_task from the Subjects tab
+        """
+        if self.settings.next_task != "TowersTaskV3":
+            return False
+
+        df_v3 = self.df[(self.df["task"] == "TowersTaskV3")
+                        & (self.df["subject"] == self.subject)]
+        if df_v3.empty:  # first V3 session for this subject
+            self.settings.last_perf_window = []
+            return True
+
+        win = int(getattr(self.settings, "acc_window", 40))
+        main = df_v3[df_v3["phase"] == "main"] if "phase" in df_v3 else df_v3
+        if "trial_correct" in main:
+            recent = main["trial_correct"].dropna().tail(win)
+            self.settings.last_perf_window = [int(bool(c)) for c in recent]
+        return True
+
     def update_training_settings(self) -> None:
         """Run between sessions to advance stage / step."""
+        if self._update_v3_settings():
+            return  # subject is on V3; no stage logic to run at all
         if self._update_v2_settings():
             return  # subject is on V2; V1 stage logic must not run
 
@@ -372,6 +399,8 @@ class TrainingProtocol(TrainingProtocolBase):
                 "acc_window",
                 "rescue_enabled",
                 "rescue_block_size",
+                "n_cues",
+                "cue_p",
             ],
             "Stage": [
                 "stage",
