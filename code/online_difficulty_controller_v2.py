@@ -138,6 +138,5 @@ class OnlineDifficultyControllerV2:
             self._perf_window.clear()
             self._slow_window.clear()
             self.difficulty.max_speed_cm_s = STAGE_GATE[self.stage]
-            self._reset_warmup(settings)
             return AdaptationEvent(stage_advanced_to=self.stage)
         return AdaptationEvent()
