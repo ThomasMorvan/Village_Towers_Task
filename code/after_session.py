@@ -38,7 +38,7 @@ class QCResult:
         return not self.flags
 
     def __str__(self) -> str:
-        return "\n".join(self.flags) if self.flags else "ok"
+        return "  |  ".join(self.flags) if self.flags else "ok"
 
 
 class SessionQC:
