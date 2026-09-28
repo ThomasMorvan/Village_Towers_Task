@@ -19,13 +19,16 @@ class TowersTaskV2_1(TowersTask):
     DIM_RANGE = 10.0  # cm/s below the gate over which cues dim
     DIM_TOP = 10  # LED value at gate - DIM_RANGE and below
     DIM_LOW = 0  # LED value at the gate (0 = off)
+    SOUND_OUT = "PWM4"  # BOX bpod, "LED4" on the UI
+    SOUND_LEVEL = 100  # PWM duty 0-255; lower ~= quieter
 
     def __init__(self):
         super().__init__()
         self._odc = OnlineDifficultyControllerV2()
         self.speed_estimator = OnlineSpeedEstimator(window=5, ends=2, dwell=1)
         self._to_cm = None
-        self._suppress_cues = False
+        self._suppress_cues = False  # latched once per trial
+        self._sound_on_time = None
         self._led_suppressed_log: list = []
         self.suppressed_leds_idx: set = set()
         self.animal_trace_fast = deque(maxlen=self.animal_trace.maxlen)
@@ -51,6 +54,7 @@ class TowersTaskV2_1(TowersTask):
                       exception=True)
         self._apply_speed_threshold()
         self._reset_speed_stats()
+        self._suppress_cues = False
         log.info(f"[v2] stage={self._odc.stage} "
                  f"({STAGES_V2[self._odc.stage].name}) "
                  f"max_speed={self._odc.max_speed:.1f} cm/s")
@@ -96,6 +100,13 @@ class TowersTaskV2_1(TowersTask):
         # Trial starts when animals drinks, so SLOW initial state
         self.speed_estimator.moving = False
 
+    def _sound(self, on: bool) -> None:
+        try:
+            self.bpod.manual_override_output(
+                (self.SOUND_OUT, self.SOUND_LEVEL if on else 0))
+        except Exception:
+            log.error("[v2] sound override failed", exception=True)
+
     def softcode_callback(self):
         if self._to_cm is not None:
             x = self.current_x
@@ -103,14 +114,21 @@ class TowersTaskV2_1(TowersTask):
             t = getattr(self.cam_box, "camera_timestamp", None) or time.time()
             try:
                 fast = self.speed_estimator.update(t, pos_cm)
-                self._suppress_cues = fast and self._odc.gate_active
+                # Latch: first crossing hides every remaining cue this trial
+                # and sounds until the choice poke.
+                if fast and self._odc.gate_active and not self._suppress_cues:
+                    self._suppress_cues = True
+                    self._sound_on_time = time.time()
+                    self._sound(True)
             except Exception:
                 log.error("[v2] estimator failed; gate disabled",
                           exception=True)
                 self._to_cm = None
+                fast = False
                 self._suppress_cues = False
+                self._sound(False)
             self._n_frames += 1
-            self._n_fast += int(self._suppress_cues)
+            self._n_fast += int(fast and self._odc.gate_active)
             speed = self.speed_estimator.speed
             if speed is not None:
                 self._max_speed = max(self._max_speed, speed)
@@ -136,6 +154,10 @@ class TowersTaskV2_1(TowersTask):
         """
         if n == 3 and not self.accept_frames.is_set():
             self._draw_speed(tracking=False)
+
+        # Choice poke (POKE LEFT/RIGHT) or timeout (END TRIAL)
+        if n in (self.SOFTCODE_CAMERA_REFUSE, self.SOFTCODE_LED_OFF):
+            self._sound(False)
 
         if self._suppress_cues and n in (self.SOFTCODE_SINGLE_LED_ON,
                                          self.SOFTCODE_ALL_LEDS_ON):
@@ -219,6 +241,7 @@ class TowersTaskV2_1(TowersTask):
         n_hidden = sum(len(e[1]) for e in self._led_suppressed_log)
         n_cues = n_shown + n_hidden
         self._odc.run_was_slow = (n_shown / n_cues >= 0.9) if n_cues else None
+        self._sound(False)
         super().after_trial()
         n = max(self._n_frames, 1)
         self.register_value("v2_stage", self._odc.stage)
@@ -237,11 +260,14 @@ class TowersTaskV2_1(TowersTask):
         self.register_value("leds_delivered", n_shown)
         self.register_value("leds_suppressed", n_hidden)
         self.register_value("led_suppressed_times", self._led_suppressed_log)
+        self.register_value("sound_on_time", self._sound_on_time)
         log.info(f"[v2] max_speed={self._odc.max_speed:.1f} "
                  f"suppressed={self._n_suppressed} "
                  f"fast={self._n_fast / n:.2f} "
                  f"peak={self._max_speed:.1f}cm/s")
         self._led_suppressed_log = []
+        self._suppress_cues = False
+        self._sound_on_time = None
         self.suppressed_leds_idx = set()
         self.cam_box.items_to_draw["led_pos_suppressed"] = []
         self.animal_trace_fast = deque(maxlen=self.animal_trace.maxlen)
