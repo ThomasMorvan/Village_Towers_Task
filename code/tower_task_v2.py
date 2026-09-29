@@ -114,9 +114,17 @@ class TowersTaskV2_1(TowersTask):
             t = getattr(self.cam_box, "camera_timestamp", None) or time.time()
             try:
                 fast = self.speed_estimator.update(t, pos_cm)
-                # Latch: first crossing hides every remaining cue this trial
-                # and sounds until the choice poke.
-                if fast and self._odc.gate_active and not self._suppress_cues:
+                # Latch: first gate crossing hides every remaining cue on this
+                # trial and sounds until the choice poke.
+                # Also need to check that the animal is moving forward and is
+                # inside the cue zone (if animal go outside, it goes to FAST)
+                lp = self.led_picker
+                v = self.speed_estimator.velocity
+                in_zone = (pos_cm is not None and lp.start_dead_zone_cm
+                           <= pos_cm <= lp.L - lp.end_dead_zone_cm)
+                if (in_zone and v is not None
+                        and v > self.speed_estimator.th_hi
+                        and self._odc.gate_active and not self._suppress_cues):
                     self._suppress_cues = True
                     self._sound_on_time = time.time()
                     self._sound(True)
