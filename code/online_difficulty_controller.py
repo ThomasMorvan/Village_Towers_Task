@@ -54,8 +54,13 @@ class Warmup:
         from left_or_right import TrialSide
         left_c = [c for s, c in pairs if s == TrialSide.LEFT]
         right_c = [c for s, c in pairs if s == TrialSide.RIGHT]
-        return (abs(sum(left_c) / len(left_c) - sum(right_c) / len(right_c))
-                if left_c and right_c else 1.0)
+        if not (left_c and right_c):
+            return 1.0
+        err_l, err_r = len(left_c) - sum(left_c), len(right_c) - sum(right_c)
+        # one error is not a bias: forgive one error wherever it helps most
+        return min(abs(
+            (err_l - dl) / len(left_c) - (err_r - dr) / len(right_c))
+                   for dl, dr in ((0, 0), (err_l > 0, 0), (0, err_r > 0)))
 
     @property
     def cumul_bias(self) -> float:
