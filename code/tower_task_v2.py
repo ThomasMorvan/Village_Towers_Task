@@ -21,6 +21,7 @@ class TowersTaskV2_1(TowersTask):
     DIM_LOW = 0  # LED value at the gate (0 = off)
     SOUND_OUT = "PWM4"  # BOX bpod, "LED4" on the UI
     SOUND_LEVEL = 100  # PWM duty 0-255; lower ~= quieter
+    SOUND_DURATION = 1.0  # s; None = sound until the choice poke
 
     def __init__(self):
         super().__init__()
@@ -29,6 +30,7 @@ class TowersTaskV2_1(TowersTask):
         self._to_cm = None
         self._suppress_cues = False  # latched once per trial
         self._sound_on_time = None
+        self._sound_playing = False
         self._led_suppressed_log: list = []
         self.suppressed_leds_idx: set = set()
         self.animal_trace_fast = deque(maxlen=self.animal_trace.maxlen)
@@ -101,6 +103,7 @@ class TowersTaskV2_1(TowersTask):
         self.speed_estimator.moving = False
 
     def _sound(self, on: bool) -> None:
+        self._sound_playing = on
         try:
             self.bpod.manual_override_output(
                 (self.SOUND_OUT, self.SOUND_LEVEL if on else 0))
@@ -115,7 +118,7 @@ class TowersTaskV2_1(TowersTask):
             try:
                 fast = self.speed_estimator.update(t, pos_cm)
                 # Latch: first gate crossing hides every remaining cue on this
-                # trial and sounds until the choice poke.
+                # trial and sounds for SOUND_DURATION.
                 # Also need to check that the animal is moving forward and is
                 # inside the cue zone (if animal go outside, it goes to FAST)
                 lp = self.led_picker
@@ -134,6 +137,10 @@ class TowersTaskV2_1(TowersTask):
                 self._to_cm = None
                 fast = False
                 self._suppress_cues = False
+                self._sound(False)
+            if (self.SOUND_DURATION is not None and self._sound_playing
+                    and time.time() - self._sound_on_time
+                    >= self.SOUND_DURATION):
                 self._sound(False)
             self._n_frames += 1
             self._n_fast += int(fast and self._odc.gate_active)

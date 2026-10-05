@@ -2,7 +2,8 @@
 
 from task_stages import StageConfig, StagePolicy
 
-GATES_CM_S = (55.0, 50.0, 45.0, 40.0, 35.0, 30.0)
+GATES_CM_S = tuple(float(g)
+                   for g in range(60, 44, -1))  # 60 to 45, 1 cm/s steps
 SLOW_FRAC = 0.75
 
 
